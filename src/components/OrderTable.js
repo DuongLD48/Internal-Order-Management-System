@@ -2,6 +2,79 @@ function formatSheetType(order) {
   return order.importSheetType || order.source || '-';
 }
 
+async function copyText(value) {
+  const text = String(value ?? '').trim();
+
+  if (!text || text === '-') {
+    return false;
+  }
+
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', 'readonly');
+  textarea.style.position = 'absolute';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  return copied;
+}
+
+function createCopyButton(value, label) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'copy-button';
+  button.textContent = 'Copy';
+  button.setAttribute('aria-label', `Copy ${label}`);
+  button.title = `Copy ${label}`;
+  button.addEventListener('click', async (event) => {
+    event.stopPropagation();
+
+    try {
+      const copied = await copyText(value);
+
+      if (!copied) {
+        return;
+      }
+
+      const original = button.textContent;
+      button.textContent = 'Copied';
+      button.classList.add('is-copied');
+      window.setTimeout(() => {
+        button.textContent = original;
+        button.classList.remove('is-copied');
+      }, 1200);
+    } catch {
+      button.textContent = 'Failed';
+      button.classList.add('is-error');
+      window.setTimeout(() => {
+        button.textContent = 'Copy';
+        button.classList.remove('is-error');
+      }, 1200);
+    }
+  });
+  return button;
+}
+
+function createCopyCellContent(value, label) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'copy-cell';
+
+  const text = document.createElement('span');
+  text.textContent = value || '-';
+
+  wrapper.appendChild(text);
+  wrapper.appendChild(createCopyButton(value, label));
+
+  return wrapper;
+}
+
 function renderProducts(order) {
   const wrapper = document.createElement('div');
   wrapper.className = 'product-chip-list';
@@ -127,14 +200,20 @@ export function renderOrderTable({
       <td class="orders-table__checkbox-cell">
         <input type="checkbox" ${isChecked ? 'checked' : ''} aria-label="Select ${order.orderId}" />
       </td>
-      <td>${order.orderId}</td>
-      <td>${order.trackingId}</td>
+      <td class="orders-table__copy-cell"></td>
+      <td class="orders-table__copy-cell"></td>
       <td>${order.date}</td>
       <td class="orders-table__products-cell"></td>
       <td>${formatSheetType(order)}</td>
       <td><span class="status-pill status-pill--${order.status}">${order.status}</span></td>
     `;
 
+    row.querySelectorAll('.orders-table__copy-cell')[0].appendChild(
+      createCopyCellContent(order.orderId, 'Order ID')
+    );
+    row.querySelectorAll('.orders-table__copy-cell')[1].appendChild(
+      createCopyCellContent(order.trackingId, 'Tracking')
+    );
     row.querySelector('.orders-table__products-cell').appendChild(renderProducts(order));
 
     const selectRow = () => onSelect?.(order);

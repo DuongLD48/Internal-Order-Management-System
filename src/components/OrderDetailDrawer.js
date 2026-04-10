@@ -5,11 +5,85 @@ function valueOrFallback(value) {
   return value === null || value === undefined || value === '' ? '-' : value;
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+async function copyText(value) {
+  const text = String(value ?? '').trim();
+
+  if (!text || text === '-') {
+    return false;
+  }
+
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', 'readonly');
+  textarea.style.position = 'absolute';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  return copied;
+}
+
+function createCopyButton({ label, value, compact = false }) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `copy-button${compact ? ' copy-button--compact' : ''}`;
+  button.textContent = 'Copy';
+  button.setAttribute('aria-label', `Copy ${label}`);
+  button.title = `Copy ${label}`;
+  button.addEventListener('click', async () => {
+    try {
+      const copied = await copyText(value);
+
+      if (!copied) {
+        return;
+      }
+
+      const original = button.textContent;
+      button.textContent = 'Copied';
+      button.classList.add('is-copied');
+      window.setTimeout(() => {
+        button.textContent = original;
+        button.classList.remove('is-copied');
+      }, 1200);
+    } catch {
+      button.textContent = 'Failed';
+      button.classList.add('is-error');
+      window.setTimeout(() => {
+        button.textContent = 'Copy';
+        button.classList.remove('is-error');
+      }, 1200);
+    }
+  });
+  return button;
+}
+
+function createDetailGridItem({ label, value, copyValue }) {
+  const item = document.createElement('div');
+
+  const top = document.createElement('div');
+  top.className = 'detail-grid__label-row';
+
+  const strong = document.createElement('strong');
+  strong.textContent = label;
+  top.appendChild(strong);
+
+  if (copyValue) {
+    top.appendChild(createCopyButton({ label, value: copyValue, compact: true }));
+  }
+
+  const span = document.createElement('span');
+  span.textContent = valueOrFallback(value);
+
+  item.appendChild(top);
+  item.appendChild(span);
+
+  return item;
 }
 
 function formatDateTime(value) {
@@ -404,6 +478,26 @@ export function renderOrderDetailDrawer({
     actionRow.appendChild(printButton);
   }
 
+  if (detailState.order) {
+    const summaryButton = document.createElement('button');
+    summaryButton.type = 'button';
+    summaryButton.className = 'button button--secondary';
+    summaryButton.textContent = 'Copy Summary';
+    summaryButton.disabled = detailState.loading || actionLoading;
+    summaryButton.addEventListener('click', async () => {
+      const summary = [
+        `Order ID: ${valueOrFallback(detailState.order.orderId)}`,
+        `Tracking: ${valueOrFallback(detailState.order.trackingId)}`,
+        `Date: ${valueOrFallback(detailState.order.date)}`,
+        'Products:',
+        ...((detailState.order.productLines ?? []).length ? detailState.order.productLines : ['-'])
+      ].join('\n');
+
+      await copyText(summary);
+    });
+    actionRow.appendChild(summaryButton);
+  }
+
   if (canComplete) {
     const completeButton = document.createElement('button');
     completeButton.type = 'button';
@@ -522,20 +616,61 @@ export function renderOrderDetailDrawer({
   } else {
     const detailGrid = document.createElement('div');
     detailGrid.className = 'detail-grid';
-    detailGrid.innerHTML = `
-      <div><strong>Order ID</strong><span>${valueOrFallback(order.orderId)}</span></div>
-      <div><strong>Tracking ID</strong><span>${valueOrFallback(order.trackingId)}</span></div>
-      <div><strong>Date</strong><span>${valueOrFallback(order.date)}</span></div>
-      <div><strong>Status</strong><span>${valueOrFallback(order.status)}</span></div>
-      <div><strong>Printed</strong><span>${order.isPrintOrder ? `Yes (${order.printCount ?? 0})` : 'No'}</span></div>
-      <div><strong>Completed</strong><span>${order.isOrderCompleted ? 'Yes' : 'No'}</span></div>
-      <div><strong>Version</strong><span>${valueOrFallback(order.version)}</span></div>
-      <div><strong>Source</strong><span>${valueOrFallback(order.source)}</span></div>
-      <div><strong>Sheet</strong><span>${valueOrFallback(order.importSheetType)}</span></div>
-      <div><strong>Created By</strong><span>${valueOrFallback(order.createdBy?.email)}</span></div>
-      <div><strong>Updated By</strong><span>${valueOrFallback(order.updatedBy?.email)}</span></div>
-      <div class="detail-grid__wide"><strong>Product Lines</strong><span>${(order.productLines ?? []).join(', ') || '-'}</span></div>
-    `;
+    detailGrid.appendChild(createDetailGridItem({
+      label: 'Order ID',
+      value: order.orderId,
+      copyValue: order.orderId
+    }));
+    detailGrid.appendChild(createDetailGridItem({
+      label: 'Tracking ID',
+      value: order.trackingId,
+      copyValue: order.trackingId
+    }));
+    detailGrid.appendChild(createDetailGridItem({
+      label: 'Date',
+      value: order.date
+    }));
+    detailGrid.appendChild(createDetailGridItem({
+      label: 'Status',
+      value: order.status
+    }));
+    detailGrid.appendChild(createDetailGridItem({
+      label: 'Printed',
+      value: order.isPrintOrder ? `Yes (${order.printCount ?? 0})` : 'No'
+    }));
+    detailGrid.appendChild(createDetailGridItem({
+      label: 'Completed',
+      value: order.isOrderCompleted ? 'Yes' : 'No'
+    }));
+    detailGrid.appendChild(createDetailGridItem({
+      label: 'Version',
+      value: order.version
+    }));
+    detailGrid.appendChild(createDetailGridItem({
+      label: 'Source',
+      value: order.source
+    }));
+    detailGrid.appendChild(createDetailGridItem({
+      label: 'Sheet',
+      value: order.importSheetType
+    }));
+    detailGrid.appendChild(createDetailGridItem({
+      label: 'Created By',
+      value: order.createdBy?.email
+    }));
+    detailGrid.appendChild(createDetailGridItem({
+      label: 'Updated By',
+      value: order.updatedBy?.email
+    }));
+
+    const productItem = createDetailGridItem({
+      label: 'Product Lines',
+      value: (order.productLines ?? []).join(', ') || '-',
+      copyValue: (order.productLines ?? []).join('\n')
+    });
+    productItem.classList.add('detail-grid__wide');
+    detailGrid.appendChild(productItem);
+
     body.appendChild(detailGrid);
     body.appendChild(
       renderProductItemsSection({
