@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function currentUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function hasProfile() {
+      return signedIn() && currentUserDoc().exists();
+    }
+
+    function isActive() {
+      return hasProfile() && currentUserDoc().data.active == true;
+    }
+
+    function role() {
+      return currentUserDoc().data.role;
+    }
+
+    function isAdmin() {
+      return isActive() && role() == 'admin';
+    }
+
+    function isStaff() {
+      return isActive() && role() == 'staff';
+    }
+
+    function canReadOrders() {
+      return isAdmin() || isStaff() || (isActive() && role() == 'viewer');
+    }
+
+    match /users/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /systemLocks/{lockId} {
+      allow read: if canReadOrders();
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /orders/{orderId} {
+      allow read: if canReadOrders();
+      allow create: if isAdmin();
+      allow update: if isAdmin()
+        || (
+          isStaff()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'isPrintOrder',
+            'printCount',
+            'lastPrintedAt',
+            'status',
+            'deleted',
+            'isOrderCompleted',
+            'productItems',
+            'productLines',
+            'updatedAt',
+            'updatedBy'
+          ])
+        );
+      allow delete: if false;
+
+      match /logs/{logId} {
+        allow read: if canReadOrders();
+        allow create: if isAdmin() || isStaff();
+        allow update, delete: if false;
+      }
+    }
+  }
+}
