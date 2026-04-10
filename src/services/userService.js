@@ -1,7 +1,7 @@
 import { getDocs, orderBy, query } from 'firebase/firestore';
 import { COLLECTIONS } from '../constants/firestore.js';
 import { PERMISSIONS } from '../constants/permissions.js';
-import { assertPermission } from '../guards/roleGuard.js';
+import { assertPermission, hasPermission } from '../guards/roleGuard.js';
 import { getCollectionRef, fetchDocument, writeDocument, patchDocument } from '../firebase/firestore.js';
 import { createTimestamp } from '../utils/dateFormatter.js';
 import { normalizeUserProfile } from '../utils/firestoreMappers.js';
@@ -40,9 +40,13 @@ export async function listUsers(actor) {
 export async function upsertUserProfile(payload, actor) {
   assertPermission(actor?.role, PERMISSIONS.USERS_MANAGE);
 
-  const normalized = validateUserProfilePayload(payload);
+  const existing = await fetchDocument(COLLECTIONS.USERS, validateRequiredString(payload.uid, 'uid'));
+  const canSetRole = hasPermission(actor?.role, PERMISSIONS.USERS_SET_ROLE);
+  const normalized = validateUserProfilePayload({
+    ...payload,
+    role: canSetRole ? payload.role : existing?.role ?? 'viewer'
+  });
   const timestamp = createTimestamp();
-  const existing = await fetchDocument(COLLECTIONS.USERS, normalized.uid);
 
   const document = {
     ...normalized,
@@ -57,7 +61,7 @@ export async function upsertUserProfile(payload, actor) {
 }
 
 export async function updateUserRole({ uid, role }, actor) {
-  assertPermission(actor?.role, PERMISSIONS.USERS_MANAGE);
+  assertPermission(actor?.role, PERMISSIONS.USERS_SET_ROLE);
 
   const normalizedUid = validateRequiredString(uid, 'uid');
   const normalizedRole = validateRole(role);

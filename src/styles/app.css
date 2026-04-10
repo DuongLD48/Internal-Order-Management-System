@@ -220,6 +220,14 @@ body {
   color: var(--muted);
 }
 
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
 .panel__placeholder,
 .textarea-placeholder {
   min-height: 120px;

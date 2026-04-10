@@ -11,7 +11,7 @@ function renderAccessDenied() {
   section.innerHTML = `
     <article class="panel">
       <h3>Import Access Denied</h3>
-      <p>Only admin users can preview and import pasted Excel data.</p>
+      <p>Your current role cannot preview and import pasted Excel data.</p>
     </article>
   `;
   return section;
@@ -43,7 +43,7 @@ export function renderImportPage({ state }) {
   hero.className = 'page-hero';
   hero.innerHTML = `
     <div>
-      <span class="eyebrow">Admin Import</span>
+      <span class="eyebrow">Order Import</span>
       <h2>Excel paste preview pipeline</h2>
       <p class="page-copy">
         Parse tab-separated rows, filter invalid data, validate tracking/order relationships, and preview aggregate orders before creation.

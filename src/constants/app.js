@@ -1,6 +1,6 @@
 export const APP_NAME = 'Internal Order Management System';
 
-export const ROLE_OPTIONS = ['admin', 'staff', 'viewer'];
+export const ROLE_OPTIONS = ['admin', 'manager', 'staff', 'viewer'];
 
 export const ORDER_STATUS = {
   OPEN: 'open',

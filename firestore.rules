@@ -25,30 +25,39 @@ service cloud.firestore {
       return isActive() && role() == 'admin';
     }
 
+    function isManager() {
+      return isActive() && role() == 'manager';
+    }
+
     function isStaff() {
       return isActive() && role() == 'staff';
     }
 
     function canReadOrders() {
-      return isAdmin() || isStaff() || (isActive() && role() == 'viewer');
+      return isAdmin() || isManager() || isStaff() || (isActive() && role() == 'viewer');
     }
 
     match /users/{uid} {
-      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
-      allow create, update: if isAdmin();
+      allow read: if isAdmin() || isManager() || (signedIn() && request.auth.uid == uid);
+      allow create: if isAdmin() || (isManager() && request.resource.data.role == 'viewer');
+      allow update: if isAdmin()
+        || (
+          isManager()
+          && request.resource.data.role == resource.data.role
+        );
       allow delete: if false;
     }
 
     match /systemLocks/{lockId} {
       allow read: if canReadOrders();
-      allow create, update: if isAdmin();
+      allow create, update: if isAdmin() || isManager();
       allow delete: if false;
     }
 
     match /orders/{orderId} {
       allow read: if canReadOrders();
-      allow create: if isAdmin();
-      allow update: if isAdmin()
+      allow create: if isAdmin() || isManager();
+      allow update: if isAdmin() || isManager()
         || (
           isStaff()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -68,7 +77,7 @@ service cloud.firestore {
 
       match /logs/{logId} {
         allow read: if canReadOrders();
-        allow create: if isAdmin() || isStaff();
+        allow create: if isAdmin() || isManager() || isStaff();
         allow update, delete: if false;
       }
     }

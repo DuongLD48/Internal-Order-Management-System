@@ -2,6 +2,20 @@ function formatSheetType(order) {
   return order.importSheetType || order.source || '-';
 }
 
+function buildTableCopyText(orders) {
+  const header = ['Order ID', 'Tracking', 'Date', 'Product', 'Sheet', 'Status'];
+  const rows = orders.map((order) => [
+    order.orderId || '-',
+    order.trackingId || '-',
+    order.date || '-',
+    (order.productLines ?? []).join(', ') || '-',
+    formatSheetType(order),
+    order.status || '-'
+  ]);
+
+  return [header, ...rows].map((row) => row.join('\t')).join('\n');
+}
+
 async function copyText(value) {
   const text = String(value ?? '').trim();
 
@@ -116,11 +130,39 @@ export function renderOrderTable({
 }) {
   const card = document.createElement('article');
   card.className = 'panel';
+  const header = document.createElement('div');
+  header.className = 'panel-header';
 
-  card.innerHTML = `
+  const titleBlock = document.createElement('div');
+  titleBlock.innerHTML = `
     <h3>Orders</h3>
     <p>Click a row to inspect order details. Status colors match the operational state.</p>
   `;
+
+  const copyTableButton = document.createElement('button');
+  copyTableButton.type = 'button';
+  copyTableButton.className = 'button button--secondary';
+  copyTableButton.textContent = 'Copy Table';
+  copyTableButton.disabled = loading || Boolean(error) || !orders.length;
+  copyTableButton.addEventListener('click', async () => {
+    try {
+      await copyText(buildTableCopyText(orders));
+      const original = copyTableButton.textContent;
+      copyTableButton.textContent = 'Copied';
+      window.setTimeout(() => {
+        copyTableButton.textContent = original;
+      }, 1200);
+    } catch {
+      copyTableButton.textContent = 'Failed';
+      window.setTimeout(() => {
+        copyTableButton.textContent = 'Copy Table';
+      }, 1200);
+    }
+  });
+
+  header.appendChild(titleBlock);
+  header.appendChild(copyTableButton);
+  card.appendChild(header);
 
   if (loading) {
     const state = document.createElement('div');

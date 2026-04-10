@@ -29,7 +29,7 @@ function renderAccessDenied() {
   section.innerHTML = `
     <article class="panel">
       <h3>Users Access Denied</h3>
-      <p>Only admins can view and manage user profile documents.</p>
+      <p>Your current role cannot view and manage user profile documents.</p>
     </article>
   `;
   return section;
@@ -46,6 +46,7 @@ function renderSummary(users) {
   [
     ['Total Users', String(users.length)],
     ['Admins', String(countUsersByRole(users, 'admin'))],
+    ['Managers', String(countUsersByRole(users, 'manager'))],
     ['Staff', String(countUsersByRole(users, 'staff'))],
     ['Inactive', String(users.filter((user) => !user.active).length)]
   ].forEach(([label, value]) => {
@@ -74,7 +75,7 @@ export function renderUsersPage({ state }) {
   hero.className = 'page-hero';
   hero.innerHTML = `
     <div>
-      <span class="eyebrow">Admin</span>
+      <span class="eyebrow">User Access</span>
       <h2>User management</h2>
       <p class="page-copy">
         Manage Firestore profile documents for authenticated users, update roles, and toggle active state.
@@ -97,6 +98,7 @@ export function renderUsersPage({ state }) {
 
   const actor = state.currentUser;
   const canManage = hasPermission(actor?.role, PERMISSIONS.USERS_MANAGE);
+  const canSetRole = hasPermission(actor?.role, PERMISSIONS.USERS_SET_ROLE);
   const viewState = {
     loading: true,
     saving: false,
@@ -149,7 +151,7 @@ export function renderUsersPage({ state }) {
       formPanel.className = 'panel';
       formPanel.innerHTML = `
         <h3>Upsert User Profile</h3>
-        <p>Create or update <code>users/{uid}</code> after the authentication account already exists.</p>
+      <p>Create or update <code>users/{uid}</code> after the authentication account already exists.</p>
       `;
 
       const form = document.createElement('form');
@@ -170,7 +172,7 @@ export function renderUsersPage({ state }) {
           </label>
           <label class="field">
             <span>Role</span>
-            <select name="role" ${viewState.saving ? 'disabled' : ''}>
+            <select name="role" ${viewState.saving || !canSetRole ? 'disabled' : ''}>
               ${ROLE_OPTIONS.map((role) => `<option value="${role}" ${role === viewState.form.role ? 'selected' : ''}>${role}</option>`).join('')}
             </select>
           </label>
@@ -187,6 +189,13 @@ export function renderUsersPage({ state }) {
       const feedback = document.createElement('div');
       feedback.className = `form-feedback${viewState.error ? ' is-error' : ''}`;
       feedback.textContent = viewState.error || viewState.message || ' ';
+
+      if (!canSetRole) {
+        const helper = document.createElement('p');
+        helper.className = 'field-helper';
+        helper.textContent = 'Manager can save profile and active state, but only admin can set user role.';
+        form.appendChild(helper);
+      }
 
       const actions = document.createElement('div');
       actions.className = 'modal-actions';
@@ -227,7 +236,9 @@ export function renderUsersPage({ state }) {
           uid: String(formData.get('uid') ?? '').trim(),
           email: String(formData.get('email') ?? '').trim(),
           name: String(formData.get('name') ?? '').trim(),
-          role: String(formData.get('role') ?? 'viewer'),
+          role: canSetRole
+            ? String(formData.get('role') ?? 'viewer')
+            : (viewState.users.find((user) => user.uid === String(formData.get('uid') ?? '').trim())?.role ?? 'viewer'),
           active: formData.get('active') === 'on'
         };
 
@@ -258,7 +269,7 @@ export function renderUsersPage({ state }) {
     listPanel.className = 'panel';
     listPanel.innerHTML = `
       <h3>Accounts</h3>
-      <p>Search by name, email, uid, or role. Role and active changes are protected on both UI and service layer.</p>
+      <p>Search by name, email, uid, or role. Role changes are admin-only.</p>
     `;
 
     const searchLabel = document.createElement('label');
@@ -326,7 +337,7 @@ export function renderUsersPage({ state }) {
         `;
 
         const roleCell = row.children[3];
-        if (canManage) {
+        if (canSetRole) {
           const select = document.createElement('select');
           select.className = 'user-role-select';
           select.disabled = rowLoading || isSelf;
@@ -349,33 +360,6 @@ export function renderUsersPage({ state }) {
         if (canManage) {
           const actions = document.createElement('div');
           actions.className = 'user-actions';
-
-          const saveRoleButton = document.createElement('button');
-          saveRoleButton.type = 'button';
-          saveRoleButton.className = 'button button--secondary';
-          saveRoleButton.textContent = 'Save Role';
-          saveRoleButton.disabled = rowLoading || isSelf || selectedRole === user.role;
-          saveRoleButton.addEventListener('click', async () => {
-            if (!hasPermission(actor?.role, PERMISSIONS.USERS_MANAGE)) {
-              return;
-            }
-
-            viewState.rowLoadingUid = user.uid;
-            viewState.error = '';
-            viewState.message = '';
-            renderPage();
-
-            try {
-              await userService.updateUserRole({ uid: user.uid, role: selectedRole }, actor);
-              viewState.message = `Updated role for ${user.email}.`;
-              await loadUsers();
-            } catch (error) {
-              viewState.error = error.message || 'Failed to update role.';
-            } finally {
-              viewState.rowLoadingUid = '';
-              renderPage();
-            }
-          });
 
           const activeButton = document.createElement('button');
           activeButton.type = 'button';
@@ -404,12 +388,42 @@ export function renderUsersPage({ state }) {
             }
           });
 
-          actions.appendChild(saveRoleButton);
+          if (canSetRole) {
+            const saveRoleButton = document.createElement('button');
+            saveRoleButton.type = 'button';
+            saveRoleButton.className = 'button button--secondary';
+            saveRoleButton.textContent = 'Save Role';
+            saveRoleButton.disabled = rowLoading || isSelf || selectedRole === user.role;
+            saveRoleButton.addEventListener('click', async () => {
+              if (!hasPermission(actor?.role, PERMISSIONS.USERS_SET_ROLE)) {
+                return;
+              }
+
+              viewState.rowLoadingUid = user.uid;
+              viewState.error = '';
+              viewState.message = '';
+              renderPage();
+
+              try {
+                await userService.updateUserRole({ uid: user.uid, role: selectedRole }, actor);
+                viewState.message = `Updated role for ${user.email}.`;
+                await loadUsers();
+              } catch (error) {
+                viewState.error = error.message || 'Failed to update role.';
+              } finally {
+                viewState.rowLoadingUid = '';
+                renderPage();
+              }
+            });
+            actions.appendChild(saveRoleButton);
+          }
           actions.appendChild(activeButton);
           if (isSelf) {
             const note = document.createElement('small');
             note.className = 'field-helper';
-            note.textContent = 'Self role/active changes are disabled for safety.';
+            note.textContent = canSetRole
+              ? 'Self role/active changes are disabled for safety.'
+              : 'Self active changes are disabled for safety.';
             actions.appendChild(note);
           }
           actionsCell.appendChild(actions);
