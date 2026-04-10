@@ -182,12 +182,24 @@ export async function createOrdersBatch(orders, actor) {
   );
 
   await executeTransaction(async (transaction) => {
+    const snapshots = [];
+
     for (const record of createdOrders) {
       const orderRef = getOrderRef(record.orderId);
-      const logRef = getNewOrderLogRef(record.orderId);
       const existing = await transaction.get(orderRef);
 
-      if (existing.exists()) {
+      snapshots.push({
+        record,
+        orderRef,
+        exists: existing.exists()
+      });
+    }
+
+    for (const item of snapshots) {
+      const { record, orderRef, exists } = item;
+      const logRef = getNewOrderLogRef(record.orderId);
+
+      if (exists) {
         throw new Error(`Order ${record.orderId} already exists.`);
       }
 
@@ -219,6 +231,8 @@ export async function printOrders(orderIds, actor) {
   await executeTransaction(async (transaction) => {
     await assertImportNotLocked(actor, transaction);
 
+    const snapshotRecords = [];
+
     for (const orderId of uniqueOrderIds) {
       const orderRef = getOrderRef(orderId);
       const snapshot = await transaction.get(orderRef);
@@ -228,6 +242,16 @@ export async function printOrders(orderIds, actor) {
       }
 
       const beforeRecord = normalizeOrderRecord(mapDocumentSnapshot(snapshot));
+
+      snapshotRecords.push({
+        orderId,
+        orderRef,
+        beforeRecord
+      });
+    }
+
+    for (const item of snapshotRecords) {
+      const { orderId, orderRef, beforeRecord } = item;
 
       if (beforeRecord.status === ORDER_STATUS.CANCELLED || beforeRecord.deleted) {
         throw new Error(`Cancelled order ${orderId} cannot be printed.`);
@@ -745,10 +769,10 @@ export async function completeOrdersByTrackingPreview(previewResult, actor) {
   await executeTransaction(async (transaction) => {
     await assertImportNotLocked(actor, transaction);
 
+    const snapshotRecords = [];
+
     for (const orderId of readyOrderIds) {
-      const timestamp = createTimestamp();
       const orderRef = getOrderRef(orderId);
-      const logRef = getNewOrderLogRef(orderId);
       const snapshot = await transaction.get(orderRef);
 
       if (!snapshot.exists()) {
@@ -756,6 +780,18 @@ export async function completeOrdersByTrackingPreview(previewResult, actor) {
       }
 
       const beforeRecord = normalizeOrderRecord(mapDocumentSnapshot(snapshot));
+
+      snapshotRecords.push({
+        orderId,
+        orderRef,
+        beforeRecord
+      });
+    }
+
+    for (const item of snapshotRecords) {
+      const { orderId, orderRef, beforeRecord } = item;
+      const timestamp = createTimestamp();
+      const logRef = getNewOrderLogRef(orderId);
 
       if (beforeRecord.status === ORDER_STATUS.COMPLETED || beforeRecord.isOrderCompleted) {
         throw new Error(`Order ${orderId} was already completed by another user. Reload and try again.`);

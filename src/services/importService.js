@@ -123,12 +123,24 @@ export async function createOrdersFromPreview({
 
   try {
     await executeTransaction(async (transaction) => {
+      const snapshotRecords = [];
+
       for (const previewRow of previewResult.previewRows) {
         const orderRef = getOrderRef(previewRow.orderId);
         const snapshot = await transaction.get(orderRef);
         const existingOrder = snapshot.exists()
           ? normalizeOrderRecord({ id: snapshot.id, ...snapshot.data() })
           : null;
+
+        snapshotRecords.push({
+          previewRow,
+          orderRef,
+          existingOrder
+        });
+      }
+
+      for (const item of snapshotRecords) {
+        const { previewRow, orderRef, existingOrder } = item;
 
         if (existingOrder && !overwriteExisting) {
           throw new Error(`Order ${previewRow.orderId} already exists. Reload preview and confirm overwrite.`);
