@@ -5,6 +5,8 @@ export const ROUTE_PATHS = {
   LOGIN: '/login',
   IMPORT: '/import',
   PRINT_LOGS: '/print-logs',
+  TRACKING_COMPLETE: '/tracking-complete',
+  COMPLETE_LOGS: '/complete-logs',
   USERS: '/users'
 };
 
@@ -33,6 +35,18 @@ export const ROUTES = [
     permission: PERMISSIONS.LOGS_VIEW
   },
   {
+    path: ROUTE_PATHS.TRACKING_COMPLETE,
+    label: 'Complete By Tracking',
+    requiresAuth: true,
+    permission: PERMISSIONS.ORDERS_COMPLETE
+  },
+  {
+    path: ROUTE_PATHS.COMPLETE_LOGS,
+    label: 'Complete Logs',
+    requiresAuth: true,
+    permission: PERMISSIONS.LOGS_VIEW
+  },
+  {
     path: ROUTE_PATHS.USERS,
     label: 'Users',
     requiresAuth: true,
@@ -54,6 +68,16 @@ export const NAVIGATION_ITEMS = [
   {
     path: ROUTE_PATHS.PRINT_LOGS,
     label: 'Print Logs',
+    permission: PERMISSIONS.LOGS_VIEW
+  },
+  {
+    path: ROUTE_PATHS.TRACKING_COMPLETE,
+    label: 'Complete By Tracking',
+    permission: PERMISSIONS.ORDERS_COMPLETE
+  },
+  {
+    path: ROUTE_PATHS.COMPLETE_LOGS,
+    label: 'Complete Logs',
     permission: PERMISSIONS.LOGS_VIEW
   },
   {

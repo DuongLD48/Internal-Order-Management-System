@@ -87,6 +87,21 @@ export function createPrintLogsQuery({ startedAt, endedAt }) {
   return query(collectionGroup(requireFirestore(), COLLECTIONS.LOGS), ...constraints);
 }
 
+export function createOrdersByTrackingIdsQuery(trackingIds = []) {
+  const normalizedTrackingIds = trackingIds
+    .map((item) => String(item ?? '').trim())
+    .filter(Boolean);
+
+  if (!normalizedTrackingIds.length) {
+    return null;
+  }
+
+  return query(
+    getCollectionRef(COLLECTIONS.ORDERS),
+    where('trackingId', 'in', normalizedTrackingIds)
+  );
+}
+
 export function createOrdersQuery({ limitCount }) {
   const constraints = [orderBy(documentId(), 'asc')];
 

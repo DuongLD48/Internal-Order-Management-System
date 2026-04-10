@@ -452,6 +452,41 @@ body {
   margin-top: 16px;
 }
 
+.tracking-review-row--ready {
+  background: rgba(11, 122, 85, 0.04);
+}
+
+.tracking-review-row--already_completed {
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.tracking-review-row--not_found,
+.tracking-review-row--multiple_orders,
+.tracking-review-row--cancelled {
+  background: rgba(180, 35, 24, 0.05);
+}
+
+.tracking-review-pill {
+  text-transform: capitalize;
+}
+
+.tracking-review-pill--ready {
+  background: rgba(11, 122, 85, 0.12);
+  color: var(--success);
+}
+
+.tracking-review-pill--already_completed {
+  background: rgba(245, 158, 11, 0.14);
+  color: #9a5800;
+}
+
+.tracking-review-pill--not_found,
+.tracking-review-pill--multiple_orders,
+.tracking-review-pill--cancelled {
+  background: rgba(180, 35, 24, 0.12);
+  color: #b42318;
+}
+
 .order-filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

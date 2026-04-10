@@ -88,6 +88,24 @@ function normalizePrintLogRecord(logRecord) {
   };
 }
 
+function normalizeCompletionLogRecord(logRecord) {
+  const afterRecord = normalizeOrderRecord(logRecord?.changes?.after ?? {});
+
+  return {
+    id: logRecord.id,
+    action: logRecord.action,
+    createdAt: logRecord.createdAt ?? 0,
+    createdBy: logRecord.createdBy ?? null,
+    orderId: afterRecord.orderId ?? '',
+    trackingId: afterRecord.trackingId ?? '',
+    date: afterRecord.date ?? '',
+    importSheetType: afterRecord.importSheetType ?? afterRecord.source ?? '-',
+    productItems: afterRecord.productItems ?? [],
+    productLines: afterRecord.productLines ?? [],
+    note: logRecord.note ?? ''
+  };
+}
+
 export async function getPrintLogsByDate(dateValue, actor) {
   assertPermission(actor?.role, PERMISSIONS.LOGS_VIEW);
 
@@ -98,6 +116,20 @@ export async function getPrintLogsByDate(dateValue, actor) {
   return records
     .filter((item) => item.action === LOG_ACTIONS.PRINT_ORDER || item.action === LOG_ACTIONS.REPRINT_ORDER)
     .map(normalizePrintLogRecord)
+    .filter((item) => item.orderId)
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+}
+
+export async function getCompletionLogsByDate(dateValue, actor) {
+  assertPermission(actor?.role, PERMISSIONS.LOGS_VIEW);
+
+  const { startedAt, endedAt } = createDayRange(dateValue);
+  const queryObject = createPrintLogsQuery({ startedAt, endedAt });
+  const records = await fetchCollectionRecords(queryObject);
+
+  return records
+    .filter((item) => item.action === LOG_ACTIONS.COMPLETE_ORDER)
+    .map(normalizeCompletionLogRecord)
     .filter((item) => item.orderId)
     .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
 }

@@ -9,8 +9,10 @@ import { PERMISSIONS } from '../constants/permissions.js';
 import { assertPermission } from '../guards/roleGuard.js';
 import {
   createOrdersQuery,
+  createOrdersByTrackingIdsQuery,
   executeTransaction,
   fetchDocument,
+  fetchCollectionRecords,
   getNewOrderLogRef,
   getOrderRef,
   subscribeToQuery
@@ -297,6 +299,8 @@ export async function completeOrder(orderId, actor) {
   let afterRecord = null;
 
   await executeTransaction(async (transaction) => {
+    await assertImportNotLocked(actor, transaction);
+
     const orderRef = getOrderRef(normalizedOrderId);
     const logRef = getNewOrderLogRef(normalizedOrderId);
     const snapshot = await transaction.get(orderRef);
@@ -563,4 +567,250 @@ export async function updateProductItems(orderId, productItemUpdates, actor) {
   });
 
   return normalizeOrderRecord(afterRecord);
+}
+
+function splitTrackingInput(input) {
+  return String(input ?? '')
+    .split(/\r?\n/)
+    .map((item) => String(item ?? '').trim())
+    .filter(Boolean);
+}
+
+function chunkArray(items, size) {
+  const chunks = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
+async function fetchOrdersByTrackingIds(trackingIds) {
+  const uniqueTrackingIds = [...new Set(trackingIds)];
+
+  if (!uniqueTrackingIds.length) {
+    return [];
+  }
+
+  const records = [];
+  const chunks = chunkArray(uniqueTrackingIds, 10);
+
+  for (const chunk of chunks) {
+    const queryObject = createOrdersByTrackingIdsQuery(chunk);
+
+    if (!queryObject) {
+      continue;
+    }
+
+    const chunkRecords = await fetchCollectionRecords(queryObject);
+    records.push(...chunkRecords.map(normalizeOrderRecord).filter(Boolean));
+  }
+
+  return records;
+}
+
+export async function previewCompleteByTracking(trackingInput, actor) {
+  assertPermission(actor?.role, PERMISSIONS.ORDERS_COMPLETE);
+
+  const trackingLines = splitTrackingInput(trackingInput);
+
+  if (!trackingLines.length) {
+    throw new Error('Please enter at least one tracking ID.');
+  }
+
+  const countsByTracking = new Map();
+  trackingLines.forEach((trackingId) => {
+    countsByTracking.set(trackingId, (countsByTracking.get(trackingId) ?? 0) + 1);
+  });
+
+  const foundOrders = await fetchOrdersByTrackingIds(trackingLines);
+  const ordersByTracking = new Map();
+
+  foundOrders.forEach((order) => {
+    const trackingId = String(order.trackingId ?? '').trim();
+
+    if (!ordersByTracking.has(trackingId)) {
+      ordersByTracking.set(trackingId, []);
+    }
+
+    ordersByTracking.get(trackingId).push(order);
+  });
+
+  const items = trackingLines.map((trackingId, index) => {
+    const matchedOrders = ordersByTracking.get(trackingId) ?? [];
+    const duplicateInput = (countsByTracking.get(trackingId) ?? 0) > 1;
+
+    if (!matchedOrders.length) {
+      return {
+        rowNumber: index + 1,
+        trackingId,
+        status: 'not_found',
+        severity: 'error',
+        message: 'Tracking not found.',
+        duplicateInput,
+        order: null
+      };
+    }
+
+    if (matchedOrders.length > 1) {
+      return {
+        rowNumber: index + 1,
+        trackingId,
+        status: 'multiple_orders',
+        severity: 'error',
+        message: `Tracking is linked to ${matchedOrders.length} orders.`,
+        duplicateInput,
+        order: null
+      };
+    }
+
+    const order = matchedOrders[0];
+
+    if (order.status === ORDER_STATUS.COMPLETED || order.isOrderCompleted) {
+      return {
+        rowNumber: index + 1,
+        trackingId,
+        status: 'already_completed',
+        severity: 'warning',
+        message: 'Order is already completed.',
+        duplicateInput,
+        order
+      };
+    }
+
+    if (order.status === ORDER_STATUS.CANCELLED || order.deleted) {
+      return {
+        rowNumber: index + 1,
+        trackingId,
+        status: 'cancelled',
+        severity: 'error',
+        message: 'Cancelled order cannot be completed.',
+        duplicateInput,
+        order
+      };
+    }
+
+    return {
+      rowNumber: index + 1,
+      trackingId,
+      status: 'ready',
+      severity: duplicateInput ? 'warning' : 'success',
+      message: duplicateInput
+        ? 'Ready to complete. Duplicate input will be processed once.'
+        : 'Ready to complete.',
+      duplicateInput,
+      order
+    };
+  });
+
+  const readyOrderIds = [...new Set(items
+    .filter((item) => item.status === 'ready' && item.order?.orderId)
+    .map((item) => item.order.orderId))];
+
+  const blockingIssues = items.filter((item) =>
+    item.status === 'not_found' ||
+    item.status === 'multiple_orders' ||
+    item.status === 'already_completed' ||
+    item.status === 'cancelled'
+  );
+
+  return {
+    inputCount: trackingLines.length,
+    uniqueTrackingCount: [...new Set(trackingLines)].length,
+    readyCount: readyOrderIds.length,
+    duplicateInputCount: [...countsByTracking.values()].filter((count) => count > 1).length,
+    items,
+    readyOrderIds,
+    canConfirm: readyOrderIds.length > 0 && blockingIssues.length === 0
+  };
+}
+
+export async function completeOrdersByTrackingPreview(previewResult, actor) {
+  assertPermission(actor?.role, PERMISSIONS.ORDERS_COMPLETE);
+
+  const normalizedActor = createAuditActor(actor);
+  const readyOrderIds = [...new Set((previewResult?.readyOrderIds ?? []).map((item) => validateRequiredString(item, 'orderId')))];
+
+  if (!readyOrderIds.length) {
+    throw new Error('No ready orders to complete.');
+  }
+
+  if (!previewResult?.canConfirm) {
+    throw new Error('Resolve all tracking issues before completing orders.');
+  }
+
+  const completedOrders = [];
+
+  await executeTransaction(async (transaction) => {
+    await assertImportNotLocked(actor, transaction);
+
+    for (const orderId of readyOrderIds) {
+      const timestamp = createTimestamp();
+      const orderRef = getOrderRef(orderId);
+      const logRef = getNewOrderLogRef(orderId);
+      const snapshot = await transaction.get(orderRef);
+
+      if (!snapshot.exists()) {
+        throw new Error(`Order ${orderId} no longer exists. Reload and try again.`);
+      }
+
+      const beforeRecord = normalizeOrderRecord(mapDocumentSnapshot(snapshot));
+
+      if (beforeRecord.status === ORDER_STATUS.COMPLETED || beforeRecord.isOrderCompleted) {
+        throw new Error(`Order ${orderId} was already completed by another user. Reload and try again.`);
+      }
+
+      if (beforeRecord.status === ORDER_STATUS.CANCELLED || beforeRecord.deleted) {
+        throw new Error(`Order ${orderId} is cancelled and cannot be completed.`);
+      }
+
+      const afterRecord = {
+        ...beforeRecord,
+        isOrderCompleted: true,
+        status: ORDER_STATUS.COMPLETED,
+        deleted: false,
+        productItems: (beforeRecord.productItems ?? []).map((item) => ({
+          ...item,
+          status: PRODUCT_ITEM_STATUS.COMPLETED
+        })),
+        productLines: (beforeRecord.productItems ?? []).map((item) => item.name),
+        updatedAt: timestamp,
+        updatedBy: normalizedActor
+      };
+
+      transaction.update(orderRef, {
+        isOrderCompleted: true,
+        status: ORDER_STATUS.COMPLETED,
+        deleted: false,
+        productItems: afterRecord.productItems,
+        productLines: afterRecord.productLines,
+        updatedAt: afterRecord.updatedAt,
+        updatedBy: afterRecord.updatedBy
+      });
+
+      transaction.set(
+        logRef,
+        createOrderLogRecord({
+          action: LOG_ACTIONS.COMPLETE_ORDER,
+          actor: normalizedActor,
+          changes: {
+            before: beforeRecord,
+            after: afterRecord,
+            source: 'tracking-batch'
+          },
+          note: 'Order completed from tracking batch.',
+          createdAt: timestamp
+        })
+      );
+
+      completedOrders.push(normalizeOrderRecord(afterRecord));
+    }
+  });
+
+  console.info(`[orderService] completeOrdersByTrackingPreview count=${completedOrders.length}`, {
+    orderIds: completedOrders.map((item) => item.orderId)
+  });
+
+  return completedOrders;
 }

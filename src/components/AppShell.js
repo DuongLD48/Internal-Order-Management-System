@@ -5,6 +5,8 @@ import { renderLoginPage } from '../pages/LoginPage.js';
 import { renderOrdersPage } from '../pages/OrdersPage.js';
 import { renderImportPage } from '../pages/ImportPage.js';
 import { renderPrintLogsPage } from '../pages/PrintLogsPage.js';
+import { renderTrackingCompletePage } from '../pages/TrackingCompletePage.js';
+import { renderCompleteLogsPage } from '../pages/CompleteLogsPage.js';
 import { renderUsersPage } from '../pages/UsersPage.js';
 import { renderNotFoundPage } from '../pages/NotFoundPage.js';
 
@@ -13,6 +15,8 @@ const PAGE_RENDERERS = {
   [ROUTE_PATHS.ORDERS]: renderOrdersPage,
   [ROUTE_PATHS.IMPORT]: renderImportPage,
   [ROUTE_PATHS.PRINT_LOGS]: renderPrintLogsPage,
+  [ROUTE_PATHS.TRACKING_COMPLETE]: renderTrackingCompletePage,
+  [ROUTE_PATHS.COMPLETE_LOGS]: renderCompleteLogsPage,
   [ROUTE_PATHS.USERS]: renderUsersPage
 };
 
