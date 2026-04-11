@@ -29,6 +29,7 @@ export async function previewImportedOrders({ rawText, sheetType, actor }) {
     rawText,
     sheetType
   });
+  const previewCreatedAt = createTimestamp();
 
   console.info('[importService] previewImportedOrders', {
     sheetType,
@@ -40,7 +41,17 @@ export async function previewImportedOrders({ rawText, sheetType, actor }) {
     errors: result.errors.length
   });
 
-  return result;
+  return {
+    ...result,
+    previewCreatedAt
+  };
+}
+
+function getOrderLastChangeAt(order) {
+  return Math.max(
+    Number(order?.updatedAt ?? 0),
+    Number(order?.createdAt ?? 0)
+  );
 }
 
 function buildImportedOrderRecord({ previewRow, sheetType, actor, timestamp, existingOrder }) {
@@ -81,14 +92,23 @@ export async function createOrdersFromPreview({
     throw new Error('Preview result is not ready for order creation.');
   }
 
+  if (!previewResult?.previewCreatedAt) {
+    throw new Error('Preview is missing freshness metadata. Please parse preview again.');
+  }
+
   const timestamp = createTimestamp();
   const duplicates = [];
   const writes = new Map();
+  const staleOrderIds = [];
 
   for (const previewRow of previewResult.previewRows) {
     const existingOrder = normalizeOrderRecord(
       await fetchDocument(COLLECTIONS.ORDERS, previewRow.orderId)
     );
+
+    if (existingOrder && getOrderLastChangeAt(existingOrder) > Number(previewResult.previewCreatedAt)) {
+      staleOrderIds.push(previewRow.orderId);
+    }
 
     if (existingOrder) {
       duplicates.push({
@@ -101,6 +121,12 @@ export async function createOrdersFromPreview({
         continue;
       }
     }
+  }
+
+  if (staleOrderIds.length) {
+    throw new Error(
+      `Preview is outdated because these orders changed after preview: ${[...new Set(staleOrderIds)].join(', ')}. Parse Preview again before creating orders.`
+    );
   }
 
   if (duplicates.length && !overwriteExisting) {

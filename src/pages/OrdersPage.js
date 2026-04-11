@@ -8,6 +8,8 @@ import { renderOrderTable } from '../components/OrderTable.js';
 import { renderOrderDetailDrawer } from '../components/OrderDetailDrawer.js';
 import { renderEditOrderModal } from '../components/EditOrderModal.js';
 
+let activeOrdersPageSession = null;
+
 function matchesSearch(order, searchValue) {
   if (!searchValue) {
     return true;
@@ -163,6 +165,11 @@ function renderProfileLoading() {
 }
 
 export function renderOrdersPage({ state }) {
+  if (activeOrdersPageSession?.dispose) {
+    activeOrdersPageSession.dispose();
+    activeOrdersPageSession = null;
+  }
+
   if (state.profileLoading) {
     return renderProfileLoading();
   }
@@ -248,6 +255,40 @@ export function renderOrdersPage({ state }) {
   };
 
   const actor = state.currentUser;
+  const session = {
+    disposed: false,
+    unsubscribeOrders: null,
+    disconnectObserver: null,
+    dispose() {
+      this.disposed = true;
+
+      if (typeof this.unsubscribeOrders === 'function') {
+        this.unsubscribeOrders();
+        this.unsubscribeOrders = null;
+      }
+
+      if (typeof this.disconnectObserver === 'function') {
+        this.disconnectObserver();
+        this.disconnectObserver = null;
+      }
+    }
+  };
+  activeOrdersPageSession = session;
+
+  const disconnectObserver = new MutationObserver(() => {
+    if (!section.isConnected) {
+      session.dispose();
+
+      if (activeOrdersPageSession === session) {
+        activeOrdersPageSession = null;
+      }
+    }
+  });
+  disconnectObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+  session.disconnectObserver = () => disconnectObserver.disconnect();
 
   const isPrintBlocked = () => Boolean(viewState.importLock?.active);
 
@@ -264,6 +305,14 @@ export function renderOrdersPage({ state }) {
       ;
 
     viewState.visibleOrders = sortOrdersByOrderId(viewState.visibleOrders, viewState.sortDirection);
+
+    if (viewState.detail.open && viewState.detail.orderId) {
+      const liveOrder = viewState.allOrders.find((order) => order.orderId === viewState.detail.orderId);
+
+      if (liveOrder) {
+        viewState.detail.order = liveOrder;
+      }
+    }
 
     if (
       viewState.detail.open &&
@@ -344,6 +393,15 @@ export function renderOrdersPage({ state }) {
       .map((orderId) => viewState.allOrders.find((order) => order.orderId === orderId))
       .filter(Boolean);
 
+  const fetchLatestOrdersByIds = async (orderIds) => {
+    const uniqueIds = [...new Set(orderIds)];
+    const latestOrders = await Promise.all(
+      uniqueIds.map((orderId) => orderService.getOrderById(orderId, actor))
+    );
+
+    return latestOrders.filter(Boolean);
+  };
+
   const reloadDrawerIfNeeded = async () => {
     if (viewState.detail.open && viewState.detail.orderId) {
       await openOrderDrawer(viewState.detail.orderId);
@@ -359,7 +417,6 @@ export function renderOrdersPage({ state }) {
     try {
       await runner();
       viewState.actionMessage = successMessage;
-      await loadOrders();
       await reloadDrawerIfNeeded();
     } catch (error) {
       viewState.actionError = error.message || 'Order action failed.';
@@ -414,10 +471,10 @@ export function renderOrdersPage({ state }) {
           }
 
           const ids = [...viewState.selectedOrderIds];
-          const ordersToPrint = findOrdersByIds(ids);
 
           await runOrderAction(
             async () => {
+              const ordersToPrint = await fetchLatestOrdersByIds(ids);
               printService.openPrintWindow(ordersToPrint);
               await orderService.printOrders(ids, actor);
             },
@@ -433,10 +490,10 @@ export function renderOrdersPage({ state }) {
             return;
           }
 
-          const ordersToPrint = unprintedVisibleOrders();
-          const ids = ordersToPrint.map((order) => order.orderId);
+          const ids = unprintedVisibleOrders().map((order) => order.orderId);
           await runOrderAction(
             async () => {
+              const ordersToPrint = await fetchLatestOrdersByIds(ids);
               printService.openPrintWindow(ordersToPrint);
               await orderService.printOrders(ids, actor);
             },
@@ -599,7 +656,8 @@ export function renderOrdersPage({ state }) {
 
           await runOrderAction(
             async () => {
-              printService.openPrintWindow([order]);
+              const latestOrders = await fetchLatestOrdersByIds([order.orderId]);
+              printService.openPrintWindow(latestOrders);
               await orderService.printOrders([order.orderId], actor);
             },
             `Opened label for ${order.orderId} and updated print status.`
@@ -673,7 +731,6 @@ export function renderOrdersPage({ state }) {
 
             viewState.actionMessage = `Updated order ${viewState.edit.order.orderId}.`;
             viewState.actionError = '';
-            await loadOrders();
             await reloadDrawerIfNeeded();
             closeEditModal();
           } catch (error) {
@@ -687,7 +744,7 @@ export function renderOrdersPage({ state }) {
     );
   };
 
-  const loadOrders = async () => {
+  const initOrdersSubscription = async () => {
     if (!hasPermission(actor?.role, PERMISSIONS.ORDERS_VIEW)) {
       viewState.error = 'Orders permission is required.';
       renderPageSections();
@@ -700,27 +757,35 @@ export function renderOrdersPage({ state }) {
 
     try {
       await refreshImportLock();
-      viewState.allOrders = await orderService.listOrders(
+      session.unsubscribeOrders = orderService.subscribeOrders(
         {
           limitCount: 200
         },
-        actor
+        actor,
+        (orders) => {
+          if (session.disposed) {
+            return;
+          }
+
+          viewState.allOrders = orders;
+          applyClientFilters();
+          viewState.loading = false;
+          viewState.error = '';
+          renderPageSections();
+        }
       );
-      applyClientFilters();
     } catch (error) {
       viewState.error = error.message || 'Failed to load orders.';
       viewState.allOrders = [];
       viewState.visibleOrders = [];
       viewState.selectedOrderId = '';
       viewState.selectedOrderIds = new Set();
-      closeDrawer();
-    } finally {
       viewState.loading = false;
       renderPageSections();
     }
   };
 
-  void loadOrders();
+  void initOrdersSubscription();
 
   return section;
 }

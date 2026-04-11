@@ -5,6 +5,18 @@ import { importService, systemLockService } from '../services/index.js';
 import { renderImportSummaryPanel } from '../components/ImportSummaryPanel.js';
 import { renderImportPreviewTable } from '../components/ImportPreviewTable.js';
 
+const IMPORT_PLACEHOLDERS = {
+  SDR: `04/10\tSYC0016SSRG-S\tYT2610000701319285\tVN\tIn Production\tTRUE\t\t\t\t#sdr4439
+04/10\tSYC0016SSRG-L\tYT2610000701319285\tVN\tIn Production\tTRUE\t\t\t\t#sdr4439
+04/10\tSYC0180FSHO-M\tYT2610000701319053\tVN\tIn Production\tTRUE\t\t\t\t#sdr4440`,
+  BATT: `04/04\tVN\tBLZ006LRG-V19-M\tYT2609401000626219\tIn Production\tTRUE\t\t\t112-4226237-9024269
+04/04\tVN\tBLZ006LRG-V15-M\tYT2609401000626219\tIn Production\tTRUE\t\t\t112-4226237-9024269
+04/04\tVN\tBLZ006LRG-V14-M\tYT2609401000626219\tIn Production\tTRUE\t\t\t112-4226237-9024269`,
+  BFG: `03/30\tSYC0118SSRG-M\tYT2608901001212142\tIn Production\tVN\tTRUE\t\t\t113-8071385-7490603
+03/30\tSYC0066SSRG-M\tYT2608901001212142\tIn Production\tVN\tTRUE\t\t\t113-8071385-7490603
+03/30\tSYC0207SSRG-M\tYT2608901001212142\tIn Production\tVN\tTRUE\t\t\t113-8071385-7490603`
+};
+
 function renderAccessDenied() {
   const section = document.createElement('section');
   section.className = 'page';
@@ -67,7 +79,7 @@ export function renderImportPage({ state }) {
 
   const textarea = document.createElement('textarea');
   textarea.className = 'import-textarea';
-  textarea.placeholder = 'Paste tab-separated Excel rows here...';
+  textarea.placeholder = IMPORT_PLACEHOLDERS[viewState.sheetType];
 
   const parseButton = document.createElement('button');
   parseButton.type = 'button';
@@ -118,6 +130,7 @@ export function renderImportPage({ state }) {
     });
 
     textarea.value = viewState.rawText;
+    textarea.placeholder = IMPORT_PLACEHOLDERS[viewState.sheetType];
     textarea.disabled = viewState.loading;
     parseButton.disabled = viewState.loading;
     parseButton.textContent = viewState.loading ? 'Parsing...' : 'Parse Preview';

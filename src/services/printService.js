@@ -12,7 +12,11 @@ function normalizePrintableOrders(orders) {
     orderId: order.orderId ?? '',
     trackingId: order.trackingId ?? '',
     date: order.date ?? '',
-    product: (order.productLines ?? []).filter(Boolean).join('\n')
+    product: String(
+      order.product ??
+      (order.productLines ?? []).filter(Boolean).join('\n') ??
+      ''
+    )
   }));
 }
 
