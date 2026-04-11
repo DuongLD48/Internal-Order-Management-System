@@ -6,9 +6,10 @@ import {
   getOrderLogsCollectionRef,
   createLogsQuery,
   createPrintLogsQuery,
-  fetchCollectionRecords
+  fetchCollectionRecords,
+  fetchQuerySnapshot
 } from '../firebase/firestore.js';
-import { createAuditActor, createOrderLogRecord, normalizeOrderRecord } from '../utils/firestoreMappers.js';
+import { createAuditActor, createOrderLogRecord, mapQuerySnapshot, normalizeOrderRecord } from '../utils/firestoreMappers.js';
 import { createTimestamp } from '../utils/dateFormatter.js';
 import { validateRequiredString } from '../utils/validators.js';
 
@@ -50,6 +51,8 @@ export async function getOrderLogs(orderId, actor) {
   const queryObject = createLogsQuery(normalizedOrderId);
   return fetchCollectionRecords(queryObject);
 }
+
+const LOG_PAGE_SIZE = 100;
 
 function createDayRange(dateValue) {
   const normalized = String(dateValue ?? '').trim();
@@ -107,31 +110,61 @@ function normalizeCompletionLogRecord(logRecord) {
 }
 
 export async function getPrintLogsByDate(dateValue, actor) {
+  return getPrintLogsPageByDate(dateValue, actor);
+}
+
+export async function getPrintLogsPageByDate(dateValue, actor, options = {}) {
   assertPermission(actor?.role, PERMISSIONS.LOGS_VIEW);
 
   const { startedAt, endedAt } = createDayRange(dateValue);
-  const queryObject = createPrintLogsQuery({ startedAt, endedAt });
-  const records = await fetchCollectionRecords(queryObject);
-
-  return records
+  const queryObject = createPrintLogsQuery({
+    startedAt,
+    endedAt,
+    limitCount: options.limitCount ?? LOG_PAGE_SIZE,
+    cursorSnapshot: options.cursorSnapshot ?? null
+  });
+  const snapshot = await fetchQuerySnapshot(queryObject);
+  const records = mapQuerySnapshot(snapshot);
+  const normalizedRecords = records
     .filter((item) => item.action === LOG_ACTIONS.PRINT_ORDER || item.action === LOG_ACTIONS.REPRINT_ORDER)
     .map(normalizePrintLogRecord)
     .filter((item) => item.orderId)
     .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+
+  return {
+    records: normalizedRecords,
+    cursorSnapshot: snapshot.docs.at(-1) ?? null,
+    hasMore: snapshot.docs.length === (options.limitCount ?? LOG_PAGE_SIZE)
+  };
 }
 
 export async function getCompletionLogsByDate(dateValue, actor) {
+  return getCompletionLogsPageByDate(dateValue, actor);
+}
+
+export async function getCompletionLogsPageByDate(dateValue, actor, options = {}) {
   assertPermission(actor?.role, PERMISSIONS.LOGS_VIEW);
 
   const { startedAt, endedAt } = createDayRange(dateValue);
-  const queryObject = createPrintLogsQuery({ startedAt, endedAt });
-  const records = await fetchCollectionRecords(queryObject);
-
-  return records
+  const queryObject = createPrintLogsQuery({
+    startedAt,
+    endedAt,
+    limitCount: options.limitCount ?? LOG_PAGE_SIZE,
+    cursorSnapshot: options.cursorSnapshot ?? null
+  });
+  const snapshot = await fetchQuerySnapshot(queryObject);
+  const records = mapQuerySnapshot(snapshot);
+  const normalizedRecords = records
     .filter((item) => item.action === LOG_ACTIONS.COMPLETE_ORDER)
     .map(normalizeCompletionLogRecord)
     .filter((item) => item.orderId)
     .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+
+  return {
+    records: normalizedRecords,
+    cursorSnapshot: snapshot.docs.at(-1) ?? null,
+    hasMore: snapshot.docs.length === (options.limitCount ?? LOG_PAGE_SIZE)
+  };
 }
 
 export function createSystemLogPayload({ action, changes = {}, note = '' }) {

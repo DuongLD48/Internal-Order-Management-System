@@ -38,7 +38,7 @@ function renderProducts(record) {
   return wrapper;
 }
 
-function renderSummaryCards(records) {
+function renderSummaryCards(records, hasMore) {
   const uniqueOrders = new Set(records.map((item) => item.orderId)).size;
 
   const grid = document.createElement('div');
@@ -46,7 +46,8 @@ function renderSummaryCards(records) {
 
   [
     ['Complete Actions', String(records.length)],
-    ['Unique Orders', String(uniqueOrders)]
+    ['Unique Orders', String(uniqueOrders)],
+    ['Loaded', hasMore ? `${records.length}+` : String(records.length)]
   ].forEach(([label, value]) => {
     const item = document.createElement('article');
     item.className = 'summary-card';
@@ -57,7 +58,7 @@ function renderSummaryCards(records) {
   return grid;
 }
 
-function renderLogsTable({ records, loading, error }) {
+function renderLogsTable({ records, loading, loadingMore, error, hasMore, onLoadMore }) {
   const card = document.createElement('article');
   card.className = 'panel';
   card.innerHTML = `
@@ -132,6 +133,23 @@ function renderLogsTable({ records, loading, error }) {
   tableWrap.appendChild(table);
   card.appendChild(tableWrap);
 
+  if (hasMore) {
+    const footer = document.createElement('div');
+    footer.className = 'table-actions';
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'button button--secondary';
+    button.disabled = loadingMore;
+    button.textContent = loadingMore ? 'Loading More...' : 'Load More';
+    button.addEventListener('click', () => {
+      onLoadMore?.();
+    });
+
+    footer.appendChild(button);
+    card.appendChild(footer);
+  }
+
   return card;
 }
 
@@ -153,7 +171,10 @@ export function renderCompleteLogsPage({ state }) {
     selectedDate: toDateInputValue(Date.now()),
     records: [],
     loading: false,
-    error: ''
+    loadingMore: false,
+    error: '',
+    hasMore: false,
+    cursorSnapshot: null
   };
 
   const hero = document.createElement('div');
@@ -181,18 +202,36 @@ export function renderCompleteLogsPage({ state }) {
   section.appendChild(summaryMount);
   section.appendChild(tableMount);
 
-  const loadLogs = async () => {
-    viewState.loading = true;
-    viewState.error = '';
+  const loadLogs = async ({ append = false } = {}) => {
+    viewState.loading = !append;
+    viewState.loadingMore = append;
+
+    if (!append) {
+      viewState.error = '';
+      viewState.cursorSnapshot = null;
+      viewState.hasMore = false;
+    }
+
     renderPageSections();
 
     try {
-      viewState.records = await logService.getCompletionLogsByDate(viewState.selectedDate, state.currentUser);
+      const result = await logService.getCompletionLogsPageByDate(viewState.selectedDate, state.currentUser, {
+        cursorSnapshot: append ? viewState.cursorSnapshot : null
+      });
+
+      viewState.records = append
+        ? [...viewState.records, ...result.records]
+        : result.records;
+      viewState.cursorSnapshot = result.cursorSnapshot;
+      viewState.hasMore = result.hasMore;
     } catch (error) {
-      viewState.records = [];
+      if (!append) {
+        viewState.records = [];
+      }
       viewState.error = error.message || 'Failed to load complete logs.';
     } finally {
       viewState.loading = false;
+      viewState.loadingMore = false;
       renderPageSections();
     }
   };
@@ -228,7 +267,7 @@ export function renderCompleteLogsPage({ state }) {
 
     summaryMount.innerHTML = '';
     if (!viewState.loading && !viewState.error && viewState.records.length) {
-      summaryMount.appendChild(renderSummaryCards(viewState.records));
+      summaryMount.appendChild(renderSummaryCards(viewState.records, viewState.hasMore));
     }
 
     tableMount.innerHTML = '';
@@ -236,7 +275,12 @@ export function renderCompleteLogsPage({ state }) {
       renderLogsTable({
         records: viewState.records,
         loading: viewState.loading,
-        error: viewState.error
+        loadingMore: viewState.loadingMore,
+        error: viewState.error,
+        hasMore: viewState.hasMore,
+        onLoadMore: () => {
+          void loadLogs({ append: true });
+        }
       })
     );
   };

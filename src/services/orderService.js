@@ -2,6 +2,8 @@ import { getDocs } from 'firebase/firestore';
 import { ORDER_STATUS, PRODUCT_ITEM_STATUS } from '../constants/app.js';
 import {
   COLLECTIONS,
+  DASHBOARD_ORDER_QUERY_LIMIT,
+  DASHBOARD_RECENT_MONTHS,
   DEFAULT_ORDER_QUERY_LIMIT,
   LOG_ACTIONS
 } from '../constants/firestore.js';
@@ -9,12 +11,14 @@ import { PERMISSIONS } from '../constants/permissions.js';
 import { assertPermission } from '../guards/roleGuard.js';
 import {
   createOrdersQuery,
+  createOrdersByIdsQuery,
   createOrdersByTrackingIdsQuery,
   executeTransaction,
   fetchDocument,
   fetchCollectionRecords,
   getNewOrderLogRef,
   getOrderRef,
+  subscribeToDocument,
   subscribeToQuery
 } from '../firebase/firestore.js';
 import {
@@ -30,6 +34,21 @@ import { createTimestamp } from '../utils/dateFormatter.js';
 import { validateOrderEditPayload, validateOrderPayload, validateRequiredString } from '../utils/validators.js';
 import { assertImportNotLocked } from './systemLockService.js';
 
+function getRecentMonthsCutoff(months) {
+  const now = new Date();
+  const cutoff = new Date(
+    now.getFullYear(),
+    now.getMonth() - months,
+    now.getDate(),
+    0,
+    0,
+    0,
+    0
+  );
+
+  return cutoff.getTime();
+}
+
 export async function getOrderById(orderId, actor) {
   assertPermission(actor?.role, PERMISSIONS.ORDERS_VIEW);
 
@@ -37,10 +56,25 @@ export async function getOrderById(orderId, actor) {
   return normalizeOrderRecord(document);
 }
 
+export function subscribeOrderById(orderId, actor, callback, errorCallback) {
+  assertPermission(actor?.role, PERMISSIONS.ORDERS_VIEW);
+
+  const normalizedOrderId = validateRequiredString(orderId, 'orderId');
+
+  return subscribeToDocument(
+    getOrderRef(normalizedOrderId),
+    (record) => {
+      callback(normalizeOrderRecord(record));
+    },
+    errorCallback
+  );
+}
+
 export async function listOrders(filters = {}, actor) {
   assertPermission(actor?.role, PERMISSIONS.ORDERS_VIEW);
 
   const queryObject = createOrdersQuery({
+    createdAfter: typeof filters.createdAfter === 'number' ? filters.createdAfter : undefined,
     limitCount: filters.limitCount ?? DEFAULT_ORDER_QUERY_LIMIT
   });
 
@@ -52,12 +86,70 @@ export function subscribeOrders(filters = {}, actor, callback) {
   assertPermission(actor?.role, PERMISSIONS.ORDERS_VIEW);
 
   const queryObject = createOrdersQuery({
+    createdAfter: typeof filters.createdAfter === 'number' ? filters.createdAfter : undefined,
     limitCount: filters.limitCount ?? DEFAULT_ORDER_QUERY_LIMIT
   });
 
   return subscribeToQuery(queryObject, (records) => {
     callback(records.map(normalizeOrderRecord));
   });
+}
+
+export function subscribeOrdersByIds(orderIds = [], actor, callback) {
+  assertPermission(actor?.role, PERMISSIONS.ORDERS_VIEW);
+
+  const uniqueOrderIds = [...new Set(orderIds.map((item) => String(item ?? '').trim()).filter(Boolean))];
+
+  if (!uniqueOrderIds.length) {
+    callback([]);
+    return () => {};
+  }
+
+  const chunks = chunkArray(uniqueOrderIds, 10);
+  const latestById = new Map();
+  const unsubscribers = chunks.map((chunk) => {
+    const queryObject = createOrdersByIdsQuery(chunk);
+
+    if (!queryObject) {
+      return () => {};
+    }
+
+    return subscribeToQuery(queryObject, (records) => {
+      const normalizedRecords = records.map(normalizeOrderRecord).filter(Boolean);
+      const chunkSet = new Set(chunk);
+
+      chunk.forEach((orderId) => {
+        if (chunkSet.has(orderId)) {
+          latestById.delete(orderId);
+        }
+      });
+
+      normalizedRecords.forEach((record) => {
+        latestById.set(record.orderId, record);
+      });
+
+      callback(
+        uniqueOrderIds
+          .map((orderId) => latestById.get(orderId))
+          .filter(Boolean)
+      );
+    });
+  });
+
+  return () => {
+    unsubscribers.forEach((unsubscribe) => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    });
+  };
+}
+
+export function getDashboardOrdersWindow() {
+  return {
+    createdAfter: getRecentMonthsCutoff(DASHBOARD_RECENT_MONTHS),
+    limitCount: DASHBOARD_ORDER_QUERY_LIMIT
+  };
 }
 
 export async function createOrder(payload, actor) {

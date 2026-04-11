@@ -9,6 +9,62 @@ import { renderOrderDetailDrawer } from '../components/OrderDetailDrawer.js';
 import { renderEditOrderModal } from '../components/EditOrderModal.js';
 
 let activeOrdersPageSession = null;
+const ORDERS_PAGE_CACHE_KEY = 'orders-page-cache-v1';
+const REALTIME_VISIBLE_ORDER_LIMIT = 200;
+
+function readOrdersPageCache(uid) {
+  if (!uid) {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(ORDERS_PAGE_CACHE_KEY);
+
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+
+    if (parsed?.uid !== uid) {
+      return null;
+    }
+
+    return {
+      search: String(parsed.search ?? ''),
+      sortDirection: parsed.sortDirection === 'asc' ? 'asc' : 'desc',
+      filters: {
+        status: String(parsed.filters?.status ?? ''),
+        completed: String(parsed.filters?.completed ?? ''),
+        dateFrom: String(parsed.filters?.dateFrom ?? ''),
+        dateTo: String(parsed.filters?.dateTo ?? ''),
+        sheetType: String(parsed.filters?.sheetType ?? '')
+      },
+      allOrders: Array.isArray(parsed.allOrders) ? parsed.allOrders : []
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeOrdersPageCache(uid, payload) {
+  if (!uid) {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(
+      ORDERS_PAGE_CACHE_KEY,
+      JSON.stringify({
+        uid,
+        cachedAt: Date.now(),
+        ...payload
+      })
+    );
+  } catch {
+    // Ignore sessionStorage failures and keep the page functional.
+  }
+}
 
 function matchesSearch(order, searchValue) {
   if (!searchValue) {
@@ -212,19 +268,22 @@ export function renderOrdersPage({ state }) {
   section.appendChild(drawerMount);
   section.appendChild(modalMount);
 
+  const actor = state.currentUser;
+  const cachedView = readOrdersPageCache(actor?.uid);
+
   const viewState = {
-    loading: true,
+    loading: !cachedView,
     error: '',
-    search: '',
-    sortDirection: 'desc',
+    search: cachedView?.search ?? '',
+    sortDirection: cachedView?.sortDirection ?? 'desc',
     filters: {
-      status: '',
-      completed: '',
-      dateFrom: '',
-      dateTo: '',
-      sheetType: ''
+      status: cachedView?.filters?.status ?? '',
+      completed: cachedView?.filters?.completed ?? '',
+      dateFrom: cachedView?.filters?.dateFrom ?? '',
+      dateTo: cachedView?.filters?.dateTo ?? '',
+      sheetType: cachedView?.filters?.sheetType ?? ''
     },
-    allOrders: [],
+    allOrders: cachedView?.allOrders ?? [],
     visibleOrders: [],
     selectedOrderId: '',
     selectedOrderIds: new Set(),
@@ -254,17 +313,24 @@ export function renderOrdersPage({ state }) {
     }
   };
 
-  const actor = state.currentUser;
   const session = {
     disposed: false,
-    unsubscribeOrders: null,
+    unsubscribeVisibleOrders: null,
+    unsubscribeDetailOrder: null,
+    visibleSubscriptionKey: '',
     disconnectObserver: null,
     dispose() {
       this.disposed = true;
 
-      if (typeof this.unsubscribeOrders === 'function') {
-        this.unsubscribeOrders();
-        this.unsubscribeOrders = null;
+      if (typeof this.unsubscribeVisibleOrders === 'function') {
+        this.unsubscribeVisibleOrders();
+        this.unsubscribeVisibleOrders = null;
+        this.visibleSubscriptionKey = '';
+      }
+
+      if (typeof this.unsubscribeDetailOrder === 'function') {
+        this.unsubscribeDetailOrder();
+        this.unsubscribeDetailOrder = null;
       }
 
       if (typeof this.disconnectObserver === 'function') {
@@ -291,6 +357,45 @@ export function renderOrdersPage({ state }) {
   session.disconnectObserver = () => disconnectObserver.disconnect();
 
   const isPrintBlocked = () => Boolean(viewState.importLock?.active);
+
+  const syncVisibleOrderSubscriptions = () => {
+    const visibleRealtimeIds = viewState.visibleOrders
+      .slice(0, REALTIME_VISIBLE_ORDER_LIMIT)
+      .map((order) => order.orderId);
+    const nextKey = [...visibleRealtimeIds].sort().join('|');
+
+    if (nextKey === session.visibleSubscriptionKey) {
+      return;
+    }
+
+    if (typeof session.unsubscribeVisibleOrders === 'function') {
+      session.unsubscribeVisibleOrders();
+      session.unsubscribeVisibleOrders = null;
+      session.visibleSubscriptionKey = '';
+    }
+
+    if (!visibleRealtimeIds.length) {
+      return;
+    }
+
+    session.visibleSubscriptionKey = nextKey;
+    session.unsubscribeVisibleOrders = orderService.subscribeOrdersByIds(
+      visibleRealtimeIds,
+      actor,
+      (updatedOrders) => {
+        if (session.disposed || !updatedOrders.length) {
+          return;
+        }
+
+        const updatedById = new Map(updatedOrders.map((order) => [order.orderId, order]));
+        viewState.allOrders = viewState.allOrders.map((order) =>
+          updatedById.get(order.orderId) ?? order
+        );
+        applyClientFilters();
+        renderPageSections();
+      }
+    );
+  };
 
   const applyClientFilters = () => {
     viewState.visibleOrders = viewState.allOrders
@@ -319,6 +424,11 @@ export function renderOrdersPage({ state }) {
       viewState.detail.orderId &&
       !viewState.visibleOrders.some((order) => order.orderId === viewState.detail.orderId)
     ) {
+      if (typeof session.unsubscribeDetailOrder === 'function') {
+        session.unsubscribeDetailOrder();
+        session.unsubscribeDetailOrder = null;
+      }
+
       viewState.detail.open = false;
       viewState.detail.orderId = '';
       viewState.detail.order = null;
@@ -330,9 +440,23 @@ export function renderOrdersPage({ state }) {
         viewState.allOrders.some((order) => order.orderId === orderId)
       )
     );
+
+    writeOrdersPageCache(actor?.uid, {
+      search: viewState.search,
+      sortDirection: viewState.sortDirection,
+      filters: viewState.filters,
+      allOrders: viewState.allOrders
+    });
+
+    syncVisibleOrderSubscriptions();
   };
 
   const closeDrawer = () => {
+    if (typeof session.unsubscribeDetailOrder === 'function') {
+      session.unsubscribeDetailOrder();
+      session.unsubscribeDetailOrder = null;
+    }
+
     viewState.detail.open = false;
     viewState.detail.orderId = '';
     viewState.detail.error = '';
@@ -366,21 +490,55 @@ export function renderOrdersPage({ state }) {
     viewState.detail.logs = [];
     renderPageSections();
 
+    if (typeof session.unsubscribeDetailOrder === 'function') {
+      session.unsubscribeDetailOrder();
+      session.unsubscribeDetailOrder = null;
+    }
+
+    session.unsubscribeDetailOrder = orderService.subscribeOrderById(
+      orderId,
+      actor,
+      (order) => {
+        if (session.disposed || viewState.detail.orderId !== orderId) {
+          return;
+        }
+
+        if (!order) {
+          viewState.detail.error = `Order ${orderId} no longer exists.`;
+          viewState.detail.loading = false;
+          viewState.detail.order = null;
+          renderPageSections();
+          return;
+        }
+
+        viewState.detail.order = order;
+        viewState.detail.loading = false;
+        viewState.detail.error = '';
+        renderPageSections();
+      },
+      (error) => {
+        if (session.disposed || viewState.detail.orderId !== orderId) {
+          return;
+        }
+
+        viewState.detail.error = error.message || 'Failed to subscribe order detail.';
+        viewState.detail.loading = false;
+        renderPageSections();
+      }
+    );
+
     try {
-      const tasks = [orderService.getOrderById(orderId, actor)];
+      const tasks = [];
 
       if (hasPermission(actor?.role, PERMISSIONS.LOGS_VIEW)) {
         tasks.push(logService.getOrderLogs(orderId, actor));
       }
 
-      const [order, logs = []] = await Promise.all(tasks);
-
-      viewState.detail.order = order;
+      const [logs = []] = await Promise.all(tasks);
       viewState.detail.logs = logs;
     } catch (error) {
       viewState.detail.error = error.message || 'Failed to load order detail.';
     } finally {
-      viewState.detail.loading = false;
       renderPageSections();
     }
   };
@@ -744,36 +902,29 @@ export function renderOrdersPage({ state }) {
     );
   };
 
-  const initOrdersSubscription = async () => {
+  const initOrdersData = async () => {
     if (!hasPermission(actor?.role, PERMISSIONS.ORDERS_VIEW)) {
       viewState.error = 'Orders permission is required.';
       renderPageSections();
       return;
     }
 
-    viewState.loading = true;
-    viewState.error = '';
-    renderPageSections();
+    if (!cachedView) {
+      viewState.loading = true;
+      viewState.error = '';
+      renderPageSections();
+    }
 
     try {
       await refreshImportLock();
-      session.unsubscribeOrders = orderService.subscribeOrders(
-        {
-          limitCount: 200
-        },
-        actor,
-        (orders) => {
-          if (session.disposed) {
-            return;
-          }
-
-          viewState.allOrders = orders;
-          applyClientFilters();
-          viewState.loading = false;
-          viewState.error = '';
-          renderPageSections();
-        }
+      viewState.allOrders = await orderService.listOrders(
+        orderService.getDashboardOrdersWindow(),
+        actor
       );
+      applyClientFilters();
+      viewState.loading = false;
+      viewState.error = '';
+      renderPageSections();
     } catch (error) {
       viewState.error = error.message || 'Failed to load orders.';
       viewState.allOrders = [];
@@ -785,7 +936,9 @@ export function renderOrdersPage({ state }) {
     }
   };
 
-  void initOrdersSubscription();
+  applyClientFilters();
+  renderPageSections();
+  void initOrdersData();
 
   return section;
 }

@@ -11,6 +11,7 @@ import {
   query,
   runTransaction,
   setDoc,
+  startAfter,
   updateDoc,
   where,
   writeBatch
@@ -59,10 +60,28 @@ export async function fetchCollectionRecords(queryObject) {
   return mapQuerySnapshot(snapshot);
 }
 
+export async function fetchQuerySnapshot(queryObject) {
+  return getDocs(queryObject);
+}
+
 export function subscribeToQuery(queryObject, callback) {
   return onSnapshot(queryObject, (snapshot) => {
     callback(mapQuerySnapshot(snapshot));
   });
+}
+
+export function subscribeToDocument(documentRef, callback, errorCallback) {
+  return onSnapshot(
+    documentRef,
+    (snapshot) => {
+      callback(mapDocumentSnapshot(snapshot));
+    },
+    (error) => {
+      if (typeof errorCallback === 'function') {
+        errorCallback(error);
+      }
+    }
+  );
 }
 
 export function createOrderedQuery(collectionName, constraints = []) {
@@ -73,7 +92,7 @@ export function createLogsQuery(orderId) {
   return query(getOrderLogsCollectionRef(orderId), orderBy('createdAt', 'desc'));
 }
 
-export function createPrintLogsQuery({ startedAt, endedAt }) {
+export function createPrintLogsQuery({ startedAt, endedAt, limitCount, cursorSnapshot }) {
   const constraints = [];
 
   if (typeof startedAt === 'number') {
@@ -82,6 +101,16 @@ export function createPrintLogsQuery({ startedAt, endedAt }) {
 
   if (typeof endedAt === 'number') {
     constraints.push(where('createdAt', '<=', endedAt));
+  }
+
+  constraints.push(orderBy('createdAt', 'desc'));
+
+  if (cursorSnapshot) {
+    constraints.push(startAfter(cursorSnapshot));
+  }
+
+  if (limitCount) {
+    constraints.push(limit(limitCount));
   }
 
   return query(collectionGroup(requireFirestore(), COLLECTIONS.LOGS), ...constraints);
@@ -102,8 +131,30 @@ export function createOrdersByTrackingIdsQuery(trackingIds = []) {
   );
 }
 
-export function createOrdersQuery({ limitCount }) {
-  const constraints = [orderBy(documentId(), 'asc')];
+export function createOrdersByIdsQuery(orderIds = []) {
+  const normalizedOrderIds = orderIds
+    .map((item) => String(item ?? '').trim())
+    .filter(Boolean);
+
+  if (!normalizedOrderIds.length) {
+    return null;
+  }
+
+  return query(
+    getCollectionRef(COLLECTIONS.ORDERS),
+    where(documentId(), 'in', normalizedOrderIds)
+  );
+}
+
+export function createOrdersQuery({ createdAfter, limitCount }) {
+  const constraints = [];
+
+  if (typeof createdAfter === 'number') {
+    constraints.push(where('createdAt', '>=', createdAfter));
+    constraints.push(orderBy('createdAt', 'desc'));
+  } else {
+    constraints.push(orderBy(documentId(), 'asc'));
+  }
 
   if (limitCount) {
     constraints.push(limit(limitCount));

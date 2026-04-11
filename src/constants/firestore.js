@@ -30,4 +30,6 @@ export const LOG_ACTIONS = {
 };
 
 export const DEFAULT_ORDER_QUERY_LIMIT = 100;
+export const DASHBOARD_ORDER_QUERY_LIMIT = 5000;
+export const DASHBOARD_RECENT_MONTHS = 3;
 export const IMPORT_LOCK_TIMEOUT_MS = 10 * 60 * 1000;

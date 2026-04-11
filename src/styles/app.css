@@ -460,6 +460,12 @@ body {
   margin-top: 16px;
 }
 
+.table-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
+
 .tracking-review-row--ready {
   background: rgba(11, 122, 85, 0.04);
 }
