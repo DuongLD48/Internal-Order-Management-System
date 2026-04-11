@@ -234,7 +234,7 @@ function renderProductItemsSection({ order, canManageProductItems, disabled, onU
     <div class="product-items-section__header">
       <div>
         <h4>Product Items</h4>
-        <p>Each product line is now tracked separately so warehouse and office can work on the same order more clearly.</p>
+        <p>Track each product line separately.</p>
       </div>
       <div class="product-items-summary">
         <span><strong>${totalCount}</strong> total</span>
@@ -416,7 +416,7 @@ export function renderOrderDetailDrawer({
       <div>
         <span class="eyebrow">Order Detail</span>
         <h3>${valueOrFallback(order?.orderId || detailState.orderId)}</h3>
-        <p class="page-copy">Live detail view backed by Firestore document + log subcollection.</p>
+        <p class="page-copy">View order details and history.</p>
       </div>
     </div>
   `;

@@ -58,9 +58,9 @@ export function renderAppShell({
     loadingCard.className = 'page page--centered';
     loadingCard.innerHTML = `
       <div class="auth-card">
-        <span class="eyebrow">Authentication</span>
-        <h2>Dang kiem tra phien dang nhap</h2>
-        <p class="page-copy">Vui long doi trong giay lat truoc khi tai khong gian lam viec.</p>
+        <span class="eyebrow">Loading</span>
+        <h2>Loading data</h2>
+        <p class="page-copy">Please wait a moment.</p>
       </div>
     `;
     content.appendChild(loadingCard);
@@ -85,8 +85,8 @@ export function renderAppShell({
     const alert = document.createElement('div');
     alert.className = 'env-alert';
     alert.innerHTML = `
-      <strong>Firebase configuration incomplete.</strong>
-      <span>Missing: ${(state.firebaseMissingKeys ?? []).join(', ') || 'unknown'}.</span>
+      <strong>The system is temporarily unavailable.</strong>
+      <span>Please contact your administrator.</span>
     `;
     shell.appendChild(alert);
   }

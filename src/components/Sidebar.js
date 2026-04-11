@@ -30,8 +30,8 @@ export function renderSidebar({ currentPath, currentUser, onNavigate }) {
   const note = document.createElement('div');
   note.className = 'sidebar__note';
   note.innerHTML = `
-    <strong>Production-minded</strong>
-    <p>Role-aware navigation, Firebase-first data flow, and internal order tooling are ready for daily use.</p>
+    <strong>Quick Note</strong>
+    <p>Select a section to continue your work.</p>
   `;
 
   aside.appendChild(nav);

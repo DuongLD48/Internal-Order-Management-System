@@ -1,10 +1,10 @@
 function validateLoginForm({ email, password }) {
   if (!email) {
-    return 'Vui long nhap email.';
+    return 'Please enter your email.';
   }
 
   if (!password) {
-    return 'Vui long nhap mat khau.';
+    return 'Please enter your password.';
   }
 
   return '';
@@ -21,9 +21,9 @@ export function renderLoginPage({ state, onLogin }) {
 
   card.innerHTML = `
     <span class="eyebrow">Secure Access</span>
-    <h2>Dang nhap vao he thong</h2>
+    <h2>Sign in</h2>
     <p class="page-copy">
-      Chi tai khoan da duoc cap quyen moi co the truy cap khong gian quan ly don hang noi bo.
+      Sign in to continue.
     </p>
   `;
 
@@ -54,8 +54,8 @@ export function renderLoginPage({ state, onLogin }) {
   const helper = document.createElement('p');
   helper.className = 'form-helper';
   helper.textContent = firebaseReady
-    ? 'Dung email/password da duoc tao trong Firebase Authentication.'
-    : 'Dien Firebase env truoc khi dung chuc nang dang nhap.';
+    ? 'Use your assigned account.'
+    : 'The system is temporarily unavailable.';
 
   const feedback = document.createElement('div');
   feedback.className = 'form-feedback';

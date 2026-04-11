@@ -125,7 +125,7 @@ export async function createOrdersFromPreview({
 
   if (staleOrderIds.length) {
     throw new Error(
-      `Preview is outdated because these orders changed after preview: ${[...new Set(staleOrderIds)].join(', ')}. Parse Preview again before creating orders.`
+      `This preview is outdated because these orders changed after the preview was generated: ${[...new Set(staleOrderIds)].join(', ')}. Please run Parse Preview again before creating orders.`
     );
   }
 

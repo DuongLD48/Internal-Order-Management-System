@@ -9,15 +9,15 @@ function mapFirebaseAuthError(error) {
   const code = error?.code ?? 'auth/unknown';
 
   const messages = {
-    'auth/invalid-credential': 'Email hoac mat khau khong dung.',
-    'auth/user-disabled': 'Tai khoan nay da bi vo hieu hoa.',
-    'auth/invalid-email': 'Email khong hop le.',
-    'auth/missing-password': 'Vui long nhap mat khau.',
-    'auth/too-many-requests': 'Co qua nhieu lan thu dang nhap. Vui long thu lai sau.',
-    'auth/network-request-failed': 'Khong the ket noi toi Firebase. Vui long kiem tra mang.'
+    'auth/invalid-credential': 'Incorrect email or password.',
+    'auth/user-disabled': 'This account has been disabled.',
+    'auth/invalid-email': 'Please enter a valid email address.',
+    'auth/missing-password': 'Please enter your password.',
+    'auth/too-many-requests': 'Too many attempts. Please try again later.',
+    'auth/network-request-failed': 'Unable to connect. Please check your network.'
   };
 
-  return messages[code] ?? 'Dang nhap that bai. Vui long thu lai.';
+  return messages[code] ?? 'Sign in failed. Please try again.';
 }
 
 export function toAppUser(user) {
@@ -49,7 +49,7 @@ export async function loginWithEmailPassword({ email, password }) {
   const { auth, ready } = getFirebaseServices();
 
   if (!ready || !auth) {
-    throw new Error('Firebase Authentication chua san sang. Kiem tra lai file .env.');
+    throw new Error('The system is temporarily unavailable. Please try again later.');
   }
 
   try {

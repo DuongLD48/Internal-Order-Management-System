@@ -16,8 +16,8 @@ function renderProfileLoading() {
   section.className = 'page';
   section.innerHTML = `
     <article class="panel">
-      <h3>Loading profile</h3>
-      <p>Waiting for users/{uid} profile to resolve user-management permissions.</p>
+      <h3>Loading</h3>
+      <p>Please wait a moment.</p>
     </article>
   `;
   return section;
@@ -28,8 +28,8 @@ function renderAccessDenied() {
   section.className = 'page';
   section.innerHTML = `
     <article class="panel">
-      <h3>Users Access Denied</h3>
-      <p>Your current role cannot view and manage user profile documents.</p>
+      <h3>Access denied</h3>
+      <p>Your account cannot manage users.</p>
     </article>
   `;
   return section;
@@ -75,10 +75,10 @@ export function renderUsersPage({ state }) {
   hero.className = 'page-hero';
   hero.innerHTML = `
     <div>
-      <span class="eyebrow">User Access</span>
+      <span class="eyebrow">Users</span>
       <h2>User management</h2>
       <p class="page-copy">
-        Manage Firestore profile documents for authenticated users, update roles, and toggle active state.
+        Manage user profiles, roles, and active status.
       </p>
     </div>
     <div class="hero-card">
@@ -150,8 +150,8 @@ export function renderUsersPage({ state }) {
       const formPanel = document.createElement('article');
       formPanel.className = 'panel';
       formPanel.innerHTML = `
-        <h3>Upsert User Profile</h3>
-      <p>Create or update <code>users/{uid}</code> after the authentication account already exists.</p>
+        <h3>Save user profile</h3>
+      <p>Create or update a user profile.</p>
       `;
 
       const form = document.createElement('form');
@@ -193,7 +193,7 @@ export function renderUsersPage({ state }) {
       if (!canSetRole) {
         const helper = document.createElement('p');
         helper.className = 'field-helper';
-        helper.textContent = 'Manager can save profile and active state, but only admin can set user role.';
+        helper.textContent = 'Only admins can change user roles.';
         form.appendChild(helper);
       }
 

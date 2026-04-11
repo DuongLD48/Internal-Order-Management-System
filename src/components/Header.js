@@ -30,13 +30,17 @@ export function renderHeader({
 
   const badge = document.createElement('span');
   badge.className = 'topbar__status';
-  badge.textContent = currentUser ? 'Authenticated' : 'Guest mode';
+  badge.textContent = currentUser ? 'Signed in' : 'Welcome';
 
   const description = document.createElement('span');
   description.className = 'topbar__user-text';
   description.textContent = currentUser
     ? `${currentUser.email}${currentUser.role ? ` • ${currentUser.role}` : ''}`
     : 'Please sign in to continue';
+
+  if (currentUser) {
+    description.textContent = `${currentUser.email}${currentUser.role ? ` | ${currentUser.role}` : ''}`;
+  }
 
   userBlock.appendChild(badge);
   userBlock.appendChild(description);

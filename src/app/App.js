@@ -79,7 +79,7 @@ export function createApp(rootElement) {
       await loginWithEmailPassword({ email, password });
     } catch (error) {
       store.setState({
-        authError: error.message || 'Dang nhap that bai.',
+        authError: error.message || 'Sign in failed.',
         authLoading: false
       });
       return;
@@ -102,7 +102,7 @@ export function createApp(rootElement) {
       navigateTo(ROUTE_PATHS.LOGIN);
     } catch (error) {
       store.setState({
-        authError: error.message || 'Dang xuat that bai.',
+        authError: error.message || 'Sign out failed.',
         logoutLoading: false
       });
       return;
@@ -184,7 +184,7 @@ export function createApp(rootElement) {
         },
         authResolved: true,
         profileLoading: false,
-        authError: profile?.active === false ? 'Your account is inactive. Please contact an admin.' : ''
+        authError: profile?.active === false ? 'This account is inactive. Please contact your administrator.' : ''
       });
 
       syncRouteWithAuth(getRouteByPath(location.hash));

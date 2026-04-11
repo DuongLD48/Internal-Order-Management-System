@@ -91,10 +91,10 @@ export function renderEditOrderModal({
   panel.innerHTML = `
     <div class="modal-header">
       <div>
-        <span class="eyebrow">Admin Edit</span>
+        <span class="eyebrow">Edit Order</span>
         <h3>Edit Order</h3>
         <p class="page-copy">
-          Saving will reset the order back to open and keep print history unchanged.
+          Saving will reset the order to open and keep the print history unchanged.
         </p>
       </div>
     </div>
@@ -127,7 +127,7 @@ export function renderEditOrderModal({
     buildField('Order ID', 'orderId', order.orderId ?? '', {
       disabled: loading,
       readOnly: true,
-      helper: 'Order ID is read-only to avoid moving Firestore document IDs.'
+      helper: 'Order ID cannot be edited.'
     })
   );
   form.appendChild(buildField('Date', 'date', initialForm.date, { placeholder: '30/03', disabled: loading }));

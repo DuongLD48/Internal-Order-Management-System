@@ -32,7 +32,7 @@ export function renderImportSummaryPanel({ result, loading, error }) {
   card.className = 'panel';
   card.innerHTML = `
     <h3>Validation Summary</h3>
-    <p>Preview checks run before any Firestore write. Blocking errors will stop Phase 7 create flow.</p>
+    <p>Review the data before creating orders.</p>
   `;
 
   if (loading) {
@@ -91,8 +91,8 @@ export function renderImportSummaryPanel({ result, loading, error }) {
   const footer = document.createElement('div');
   footer.className = `import-result-banner${result.canCreateOrders ? ' is-success' : ' is-error'}`;
   footer.textContent = result.canCreateOrders
-    ? 'Preview is valid. Phase 7 will enable Create Orders from this aggregated result.'
-    : 'Preview contains blocking errors or no usable rows.';
+    ? 'The data is valid and ready to create orders.'
+    : 'There are blocking issues or no valid rows to create.';
   card.appendChild(footer);
 
   return card;

@@ -24,7 +24,7 @@ function requireFirestore() {
   const { db, ready } = getFirebaseServices();
 
   if (!ready || !db) {
-    throw new Error('Firestore is not ready. Check Firebase env configuration.');
+    throw new Error('The system is temporarily unavailable. Please try again later.');
   }
 
   return db;

@@ -22,8 +22,8 @@ function renderAccessDenied() {
   section.className = 'page';
   section.innerHTML = `
     <article class="panel">
-      <h3>Import Access Denied</h3>
-      <p>Your current role cannot preview and import pasted Excel data.</p>
+      <h3>Access denied</h3>
+      <p>Your account cannot import orders.</p>
     </article>
   `;
   return section;
@@ -56,9 +56,9 @@ export function renderImportPage({ state }) {
   hero.innerHTML = `
     <div>
       <span class="eyebrow">Order Import</span>
-      <h2>Excel paste preview pipeline</h2>
+      <h2>Import orders from Excel</h2>
       <p class="page-copy">
-        Parse tab-separated rows, filter invalid data, validate tracking/order relationships, and preview aggregate orders before creation.
+        Paste data from Excel, review it, and create orders when everything looks correct.
       </p>
     </div>
     <div class="hero-card">
@@ -71,7 +71,7 @@ export function renderImportPage({ state }) {
   editorCard.className = 'panel';
   editorCard.innerHTML = `
     <h3>Paste Source Data</h3>
-    <p>Select the source sheet type, paste rows directly from Excel, then run Parse Preview.</p>
+    <p>Select the sheet type, paste the data, and click Parse Preview.</p>
   `;
 
   const chipRow = document.createElement('div');
@@ -104,7 +104,7 @@ export function renderImportPage({ state }) {
 
   const helper = document.createElement('p');
   helper.className = 'import-helper';
-  helper.textContent = 'Supported sheet mappings: SDR, BATT, BFG.';
+  helper.textContent = 'Supported sheet types: SDR, BATT, and BFG.';
 
   const summaryMount = document.createElement('div');
   const previewMount = document.createElement('div');
@@ -189,7 +189,7 @@ export function renderImportPage({ state }) {
       duplicateCard.className = 'panel';
       duplicateCard.innerHTML = `
         <h3>Duplicate Order IDs</h3>
-        <p>Existing order IDs were found in Firestore. Review them and explicitly allow overwrite if this import should replace them.</p>
+        <p>Some order IDs already exist. Review them carefully and only overwrite if you really want to replace the current data.</p>
       `;
 
       const list = document.createElement('ul');
