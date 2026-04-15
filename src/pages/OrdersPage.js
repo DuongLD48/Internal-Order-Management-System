@@ -4,7 +4,7 @@ import { hasPermission } from '../guards/roleGuard.js';
 import { logService, orderService, printService, systemLockService } from '../services/index.js';
 import { renderOrderBulkActions } from '../components/OrderBulkActions.js';
 import { renderOrderFilters } from '../components/OrderFilters.js';
-import { renderOrderTable } from '../components/OrderTable.js';
+import { renderOrderTable } from '../components/OrderTableV2.js';
 import { renderOrderDetailDrawer } from '../components/OrderDetailDrawer.js';
 import { renderEditOrderModal } from '../components/EditOrderModal.js';
 
@@ -32,6 +32,7 @@ function readOrdersPageCache(uid) {
 
     return {
       search: String(parsed.search ?? ''),
+      sortKey: parsed.sortKey === 'date' ? 'date' : 'orderId',
       sortDirection: parsed.sortDirection === 'asc' ? 'asc' : 'desc',
       filters: {
         status: String(
@@ -118,8 +119,8 @@ function parseDisplayDateToKey(value) {
     return null;
   }
 
-  const day = Number(match[1]);
-  const month = Number(match[2]);
+  const month = Number(match[1]);
+  const day = Number(match[2]);
 
   if (day < 1 || day > 31 || month < 1 || month > 12) {
     return null;
@@ -170,6 +171,25 @@ function compareOrderId(a, b) {
 
 function sortOrdersByOrderId(orders, direction) {
   const sorted = [...orders].sort(compareOrderId);
+  return direction === 'asc' ? sorted : sorted.reverse();
+}
+
+function compareOrderDate(a, b) {
+  const leftKey = parseDisplayDateToKey(a.date) ?? -1;
+  const rightKey = parseDisplayDateToKey(b.date) ?? -1;
+
+  if (leftKey !== rightKey) {
+    return leftKey - rightKey;
+  }
+
+  return compareOrderId(a, b);
+}
+
+function sortOrders(orders, sortKey, direction) {
+  const sorted = [...orders].sort(
+    sortKey === 'date' ? compareOrderDate : compareOrderId
+  );
+
   return direction === 'asc' ? sorted : sorted.reverse();
 }
 
@@ -278,6 +298,7 @@ export function renderOrdersPage({ state }) {
     loading: !cachedView,
     error: '',
     search: cachedView?.search ?? '',
+    sortKey: cachedView?.sortKey ?? 'orderId',
     sortDirection: cachedView?.sortDirection ?? 'desc',
     filters: {
       status: cachedView?.filters?.status ?? '',
@@ -412,7 +433,11 @@ export function renderOrdersPage({ state }) {
       )
       ;
 
-    viewState.visibleOrders = sortOrdersByOrderId(viewState.visibleOrders, viewState.sortDirection);
+    viewState.visibleOrders = sortOrders(
+      viewState.visibleOrders,
+      viewState.sortKey,
+      viewState.sortDirection
+    );
 
     if (viewState.detail.open && viewState.detail.orderId) {
       const liveOrder = viewState.allOrders.find((order) => order.orderId === viewState.detail.orderId);
@@ -446,6 +471,7 @@ export function renderOrdersPage({ state }) {
 
     writeOrdersPageCache(actor?.uid, {
       search: viewState.search,
+      sortKey: viewState.sortKey,
       sortDirection: viewState.sortDirection,
       filters: viewState.filters,
       allOrders: viewState.allOrders
@@ -723,11 +749,18 @@ export function renderOrdersPage({ state }) {
         orders: viewState.visibleOrders,
         loading: viewState.loading,
         error: viewState.error,
+        sortKey: viewState.sortKey,
         sortDirection: viewState.sortDirection,
         selectedOrderId: viewState.selectedOrderId,
         selectedOrderIds: viewState.selectedOrderIds,
-        onToggleOrderIdSort: () => {
-          viewState.sortDirection = viewState.sortDirection === 'desc' ? 'asc' : 'desc';
+        onToggleSort: (nextSortKey) => {
+          if (viewState.sortKey === nextSortKey) {
+            viewState.sortDirection = viewState.sortDirection === 'desc' ? 'asc' : 'desc';
+          } else {
+            viewState.sortKey = nextSortKey;
+            viewState.sortDirection = nextSortKey === 'orderId' ? 'desc' : 'asc';
+          }
+
           applyClientFilters();
           renderPageSections();
         },
