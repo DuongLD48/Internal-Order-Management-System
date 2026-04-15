@@ -1,3 +1,5 @@
+import { hasOrderEditChanges } from '../utils/validators.js';
+
 function createInitialForm(order) {
   return {
     date: order?.date ?? '',
@@ -24,6 +26,16 @@ function validateEditForm(form) {
   }
 
   return '';
+}
+
+function getFormPayload(formElement) {
+  const formData = new FormData(formElement);
+
+  return {
+    date: String(formData.get('date') ?? '').trim(),
+    trackingId: String(formData.get('trackingId') ?? '').trim(),
+    product: String(formData.get('product') ?? '').trim()
+  };
 }
 
 function buildField(label, name, value, options = {}) {
@@ -167,16 +179,36 @@ export function renderEditOrderModal({
   form.appendChild(feedback);
   form.appendChild(actionRow);
 
+  const syncSaveState = () => {
+    const payload = getFormPayload(form);
+    const validationMessage = validateEditForm(payload);
+    const hasChanges = !validationMessage && hasOrderEditChanges(order, payload);
+
+    saveButton.disabled = loading || !hasChanges;
+
+    if (error) {
+      feedback.className = 'form-feedback is-error';
+      feedback.textContent = error;
+      return;
+    }
+
+    if (validationMessage) {
+      feedback.className = 'form-feedback';
+      feedback.textContent = 'Update the form with valid values to continue.';
+      return;
+    }
+
+    feedback.className = 'form-feedback';
+    feedback.textContent = hasChanges ? 'Ready to save changes.' : 'Make a change to enable saving.';
+  };
+
+  form.addEventListener('input', syncSaveState);
+  form.addEventListener('change', syncSaveState);
+
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
 
-    const formData = new FormData(form);
-    const payload = {
-      date: String(formData.get('date') ?? '').trim(),
-      trackingId: String(formData.get('trackingId') ?? '').trim(),
-      product: String(formData.get('product') ?? '').trim()
-    };
-
+    const payload = getFormPayload(form);
     const validationMessage = validateEditForm(payload);
 
     if (validationMessage) {
@@ -185,8 +217,17 @@ export function renderEditOrderModal({
       return;
     }
 
+    if (!hasOrderEditChanges(order, payload)) {
+      feedback.className = 'form-feedback';
+      feedback.textContent = 'Make a change before saving.';
+      saveButton.disabled = true;
+      return;
+    }
+
     await onSave?.(payload);
   });
+
+  syncSaveState();
 
   panel.appendChild(form);
   shell.appendChild(overlay);

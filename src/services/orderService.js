@@ -31,7 +31,12 @@ import {
   reconcileProductItems
 } from '../utils/firestoreMappers.js';
 import { createTimestamp } from '../utils/dateFormatter.js';
-import { validateOrderEditPayload, validateOrderPayload, validateRequiredString } from '../utils/validators.js';
+import {
+  hasOrderEditChanges,
+  validateOrderEditPayload,
+  validateOrderPayload,
+  validateRequiredString
+} from '../utils/validators.js';
 import { assertImportNotLocked } from './systemLockService.js';
 
 function getRecentMonthsCutoff(months) {
@@ -216,6 +221,10 @@ export async function updateOrder(orderId, updates, actor, options = {}) {
       Number(beforeRecord.version ?? 1) !== Number(expectedVersion)
     ) {
       throw new Error(`Order ${normalizedOrderId} was updated by another user. Reload and try again.`);
+    }
+
+    if (!hasOrderEditChanges(beforeRecord, normalizedUpdates)) {
+      throw new Error('No changes to save.');
     }
 
     afterRecord = {

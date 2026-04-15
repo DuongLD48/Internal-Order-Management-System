@@ -191,6 +191,37 @@ export function validateOrderEditPayload(payload) {
   };
 }
 
+function arraysEqual(left, right) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function hasOrderEditChanges(order, payload) {
+  const normalizedPayload = validateOrderEditPayload(payload);
+  const currentDate = String(order?.date ?? '').trim();
+  const currentTrackingId = String(order?.trackingId ?? '').trim();
+  const currentProductLines = validateProductLines(order?.productLines ?? []);
+
+  if (normalizedPayload.date !== currentDate) {
+    return true;
+  }
+
+  if (normalizedPayload.trackingId !== currentTrackingId) {
+    return true;
+  }
+
+  return !arraysEqual(normalizedPayload.productLines, currentProductLines);
+}
+
 export function validateUserProfilePayload(payload) {
   return {
     uid: validateRequiredString(payload.uid, 'uid'),
