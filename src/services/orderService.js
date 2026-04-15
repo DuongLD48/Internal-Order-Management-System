@@ -807,6 +807,20 @@ export async function previewCompleteByTracking(trackingInput, actor) {
       };
     }
 
+    if (order.status === ORDER_STATUS.OPEN) {
+      return {
+        rowNumber: index + 1,
+        trackingId,
+        status: 'ready_not_printed',
+        severity: duplicateInput ? 'warning' : 'success',
+        message: duplicateInput
+          ? 'Order is still open (not printed). Duplicate input will be processed once.'
+          : 'Order is still open (not printed) but can be completed.',
+        duplicateInput,
+        order
+      };
+    }
+
     return {
       rowNumber: index + 1,
       trackingId,
@@ -821,7 +835,10 @@ export async function previewCompleteByTracking(trackingInput, actor) {
   });
 
   const readyOrderIds = [...new Set(items
-    .filter((item) => item.status === 'ready' && item.order?.orderId)
+    .filter((item) =>
+      (item.status === 'ready' || item.status === 'ready_not_printed') &&
+      item.order?.orderId
+    )
     .map((item) => item.order.orderId))];
 
   const blockingIssues = items.filter((item) =>

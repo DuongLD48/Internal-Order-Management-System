@@ -470,6 +470,10 @@ body {
   background: rgba(11, 122, 85, 0.04);
 }
 
+.tracking-review-row--ready_not_printed {
+  background: rgba(31, 111, 235, 0.06);
+}
+
 .tracking-review-row--already_completed {
   background: rgba(245, 158, 11, 0.08);
 }
@@ -487,6 +491,11 @@ body {
 .tracking-review-pill--ready {
   background: rgba(11, 122, 85, 0.12);
   color: var(--success);
+}
+
+.tracking-review-pill--ready_not_printed {
+  background: rgba(31, 111, 235, 0.12);
+  color: var(--primary-strong);
 }
 
 .tracking-review-pill--already_completed {

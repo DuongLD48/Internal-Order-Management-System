@@ -92,7 +92,7 @@ export function renderImportSummaryPanel({ result, loading, error }) {
   footer.className = `import-result-banner${result.canCreateOrders ? ' is-success' : ' is-error'}`;
   footer.textContent = result.canCreateOrders
     ? 'The data is valid and ready to create orders.'
-    : 'There are blocking issues or no valid rows to create.';
+    : 'There are blocking errors, warnings, or no valid rows to create.';
   card.appendChild(footer);
 
   return card;

@@ -131,10 +131,7 @@ function aggregateRows(validRows) {
     }
 
     const aggregate = groups.get(row.trackingId);
-
-    if (!aggregate.productLines.includes(row.product)) {
-      aggregate.productLines.push(row.product);
-    }
+    aggregate.productLines.push(row.product);
 
     aggregate.sourceRows.push(row);
   });
@@ -144,7 +141,7 @@ function aggregateRows(validRows) {
       trackingId: item.trackingId,
       orderId: item.orderId,
       date: item.date,
-      product: item.productLines.join('\n'),
+      product: item.productLines.join(', '),
       productLines: item.productLines,
       sourceRows: item.sourceRows
     }))
@@ -206,6 +203,6 @@ export function parseExcelPaste({ rawText, sheetType }) {
     warnings,
     errors,
     previewRows,
-    canCreateOrders: errors.length === 0 && previewRows.length > 0
+    canCreateOrders: errors.length === 0 && warnings.length === 0 && previewRows.length > 0
   };
 }

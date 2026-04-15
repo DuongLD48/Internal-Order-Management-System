@@ -1,7 +1,7 @@
 import { PERMISSIONS } from '../constants/permissions.js';
 import { assertPermission } from '../guards/roleGuard.js';
 import { SHEET_TYPES } from '../constants/app.js';
-import { COLLECTIONS, ORDER_SOURCE, LOG_ACTIONS } from '../constants/firestore.js';
+import { ORDER_SOURCE, LOG_ACTIONS } from '../constants/firestore.js';
 import { parseExcelPaste } from '../utils/excelParser.js';
 import { createTimestamp } from '../utils/dateFormatter.js';
 import {
@@ -11,8 +11,47 @@ import {
   normalizeOrderRecord,
   reconcileProductItems
 } from '../utils/firestoreMappers.js';
-import { executeTransaction, fetchDocument, getNewOrderLogRef, getOrderRef } from '../firebase/firestore.js';
+import {
+  createOrdersByIdsQuery,
+  executeTransaction,
+  fetchCollectionRecords,
+  getNewOrderLogRef,
+  getOrderRef
+} from '../firebase/firestore.js';
 import { acquireImportLock, getImportLock, getImportLockMessage, releaseImportLock } from './systemLockService.js';
+
+function chunkArray(items, size) {
+  const chunks = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
+async function findExistingOrdersByIds(orderIds = []) {
+  const uniqueOrderIds = [...new Set(orderIds.map((item) => String(item ?? '').trim()).filter(Boolean))];
+
+  if (!uniqueOrderIds.length) {
+    return [];
+  }
+
+  const records = [];
+
+  for (const chunk of chunkArray(uniqueOrderIds, 10)) {
+    const queryObject = createOrdersByIdsQuery(chunk);
+
+    if (!queryObject) {
+      continue;
+    }
+
+    const chunkRecords = await fetchCollectionRecords(queryObject);
+    records.push(...chunkRecords.map(normalizeOrderRecord).filter(Boolean));
+  }
+
+  return records;
+}
 
 export async function previewImportedOrders({ rawText, sheetType, actor }) {
   assertPermission(actor?.role, PERMISSIONS.ORDERS_IMPORT);
@@ -30,6 +69,16 @@ export async function previewImportedOrders({ rawText, sheetType, actor }) {
     sheetType
   });
   const previewCreatedAt = createTimestamp();
+  const existingOrders = await findExistingOrdersByIds(
+    result.previewRows.map((item) => item.orderId)
+  );
+  const existingOrderErrors = existingOrders.map((order) => ({
+    type: 'ORDER_ID_ALREADY_EXISTS',
+    orderId: order.orderId,
+    trackingId: order.trackingId,
+    message: `Order ID ${order.orderId} already exists and cannot be imported again.`
+  }));
+  const errors = [...result.errors, ...existingOrderErrors];
 
   console.info('[importService] previewImportedOrders', {
     sheetType,
@@ -38,12 +87,15 @@ export async function previewImportedOrders({ rawText, sheetType, actor }) {
     ignoredRowCount: result.ignoredRowCount,
     aggregateCount: result.aggregateCount,
     warnings: result.warnings.length,
-    errors: result.errors.length
+    errors: errors.length
   });
 
   return {
     ...result,
+    errors,
     previewCreatedAt
+    ,
+    canCreateOrders: errors.length === 0 && result.warnings.length === 0 && result.previewRows.length > 0
   };
 }
 
@@ -82,8 +134,7 @@ function buildImportedOrderRecord({ previewRow, sheetType, actor, timestamp, exi
 
 export async function createOrdersFromPreview({
   previewResult,
-  actor,
-  overwriteExisting = false
+  actor
 }) {
   assertPermission(actor?.role, PERMISSIONS.ORDERS_IMPORT);
   assertPermission(actor?.role, PERMISSIONS.ORDERS_CREATE);
@@ -97,29 +148,18 @@ export async function createOrdersFromPreview({
   }
 
   const timestamp = createTimestamp();
-  const duplicates = [];
   const writes = new Map();
   const staleOrderIds = [];
+  const existingOrders = await findExistingOrdersByIds(
+    previewResult.previewRows.map((item) => item.orderId)
+  );
+  const existingOrderIds = new Set(existingOrders.map((item) => item.orderId));
 
   for (const previewRow of previewResult.previewRows) {
-    const existingOrder = normalizeOrderRecord(
-      await fetchDocument(COLLECTIONS.ORDERS, previewRow.orderId)
-    );
+    const existingOrder = existingOrders.find((item) => item.orderId === previewRow.orderId) ?? null;
 
     if (existingOrder && getOrderLastChangeAt(existingOrder) > Number(previewResult.previewCreatedAt)) {
       staleOrderIds.push(previewRow.orderId);
-    }
-
-    if (existingOrder) {
-      duplicates.push({
-        orderId: previewRow.orderId,
-        trackingId: existingOrder.trackingId,
-        status: existingOrder.status
-      });
-
-      if (!overwriteExisting) {
-        continue;
-      }
     }
   }
 
@@ -129,15 +169,10 @@ export async function createOrdersFromPreview({
     );
   }
 
-  if (duplicates.length && !overwriteExisting) {
-    console.info('[importService] createOrdersFromPreview blocked by duplicates', duplicates);
-    return {
-      success: false,
-      requiresOverwriteConfirmation: true,
-      duplicates,
-      createdCount: 0,
-      updatedCount: 0
-    };
+  if (existingOrderIds.size) {
+    throw new Error(
+      `These order IDs already exist and cannot be created again: ${[...existingOrderIds].join(', ')}. Please remove them from the import file and parse again.`
+    );
   }
 
   const currentLock = await getImportLock(actor);
@@ -168,8 +203,8 @@ export async function createOrdersFromPreview({
       for (const item of snapshotRecords) {
         const { previewRow, orderRef, existingOrder } = item;
 
-        if (existingOrder && !overwriteExisting) {
-          throw new Error(`Order ${previewRow.orderId} already exists. Reload preview and confirm overwrite.`);
+        if (existingOrder) {
+          throw new Error(`Order ${previewRow.orderId} already exists. Remove it from the import file and parse again.`);
         }
 
         const nextRecord = buildImportedOrderRecord({
@@ -177,33 +212,25 @@ export async function createOrdersFromPreview({
           sheetType: previewResult.sheetType,
           actor,
           timestamp,
-          existingOrder
+          existingOrder: null
         });
 
         transaction.set(orderRef, nextRecord);
         transaction.set(
           getNewOrderLogRef(previewRow.orderId),
           createOrderLogRecord({
-            action: existingOrder ? LOG_ACTIONS.UPDATE_ORDER : LOG_ACTIONS.CREATE_ORDER_FROM_IMPORT,
+            action: LOG_ACTIONS.CREATE_ORDER_FROM_IMPORT,
             actor,
-            changes: existingOrder
-              ? {
-                  before: existingOrder,
-                  after: normalizeOrderRecord({ id: previewRow.orderId, ...nextRecord })
-                }
-              : {
-                  after: normalizeOrderRecord({ id: previewRow.orderId, ...nextRecord })
-                },
-            note: existingOrder
-              ? 'Order overwritten from import preview.'
-              : 'Order created from import preview.',
+            changes: {
+              after: normalizeOrderRecord({ id: previewRow.orderId, ...nextRecord })
+            },
+            note: 'Order created from import preview.',
             createdAt: timestamp
           })
         );
 
         writes.set(previewRow.orderId, {
           orderId: previewRow.orderId,
-          existingOrder,
           nextRecord
         });
       }
@@ -213,21 +240,16 @@ export async function createOrdersFromPreview({
   }
 
   const writeList = [...writes.values()];
-  const createdCount = writeList.filter((item) => !item.existingOrder).length;
-  const updatedCount = writeList.filter((item) => Boolean(item.existingOrder)).length;
+  const createdCount = writeList.length;
 
   console.info('[importService] createOrdersFromPreview completed', {
     createdCount,
-    updatedCount,
     sheetType: previewResult.sheetType
   });
 
   return {
     success: true,
-    requiresOverwriteConfirmation: false,
-    duplicates,
     createdCount,
-    updatedCount,
     createdOrderIds: writeList.map((item) => item.orderId)
   };
 }

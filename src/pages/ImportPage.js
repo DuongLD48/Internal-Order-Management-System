@@ -46,8 +46,6 @@ export function renderImportPage({ state }) {
     createLoading: false,
     createError: '',
     createSuccess: '',
-    duplicateConflicts: [],
-    overwriteExisting: false,
     importLock: null
   };
 
@@ -91,13 +89,6 @@ export function renderImportPage({ state }) {
   createButton.className = 'button button--secondary';
   createButton.textContent = 'Create Orders';
 
-  const overwriteLabel = document.createElement('label');
-  overwriteLabel.className = 'checkbox-row';
-  overwriteLabel.innerHTML = `
-    <input type="checkbox" />
-    <span>Allow overwrite when orderId already exists</span>
-  `;
-
   const createFeedback = document.createElement('div');
   createFeedback.className = 'seed-feedback';
   createFeedback.textContent = ' ';
@@ -134,11 +125,8 @@ export function renderImportPage({ state }) {
     textarea.disabled = viewState.loading;
     parseButton.disabled = viewState.loading;
     parseButton.textContent = viewState.loading ? 'Parsing...' : 'Parse Preview';
-    createButton.disabled = viewState.loading || viewState.createLoading || !viewState.result?.previewRows?.length;
+    createButton.disabled = viewState.loading || viewState.createLoading || !viewState.result?.canCreateOrders;
     createButton.textContent = viewState.createLoading ? 'Creating...' : 'Create Orders';
-    overwriteLabel.querySelector('input').checked = viewState.overwriteExisting;
-    overwriteLabel.querySelector('input').disabled = viewState.createLoading;
-    overwriteLabel.style.display = viewState.duplicateConflicts.length ? 'flex' : 'none';
 
     const importLockedByAnotherUser =
       viewState.importLock?.active &&
@@ -184,26 +172,6 @@ export function renderImportPage({ state }) {
       })
     );
 
-    if (viewState.duplicateConflicts.length) {
-      const duplicateCard = document.createElement('article');
-      duplicateCard.className = 'panel';
-      duplicateCard.innerHTML = `
-        <h3>Duplicate Order IDs</h3>
-        <p>Some order IDs already exist. Review them carefully and only overwrite if you really want to replace the current data.</p>
-      `;
-
-      const list = document.createElement('ul');
-      list.className = 'import-message-list';
-
-      viewState.duplicateConflicts.forEach((item) => {
-        const li = document.createElement('li');
-        li.textContent = `${item.orderId} (tracking: ${item.trackingId}, status: ${item.status})`;
-        list.appendChild(li);
-      });
-
-      duplicateCard.appendChild(list);
-      previewMount.appendChild(duplicateCard);
-    }
   };
 
   textarea.addEventListener('input', (event) => {
@@ -221,7 +189,6 @@ export function renderImportPage({ state }) {
     viewState.error = '';
     viewState.createError = '';
     viewState.createSuccess = '';
-    viewState.duplicateConflicts = [];
     renderPage();
 
     try {
@@ -237,10 +204,6 @@ export function renderImportPage({ state }) {
       viewState.loading = false;
       renderPage();
     }
-  });
-
-  overwriteLabel.querySelector('input').addEventListener('change', (event) => {
-    viewState.overwriteExisting = event.target.checked;
   });
 
   createButton.addEventListener('click', async () => {
@@ -264,18 +227,9 @@ export function renderImportPage({ state }) {
     try {
       const response = await importService.createOrdersFromPreview({
         previewResult: viewState.result,
-        actor: state.currentUser,
-        overwriteExisting: viewState.overwriteExisting
+        actor: state.currentUser
       });
-
-      if (!response.success && response.requiresOverwriteConfirmation) {
-        viewState.duplicateConflicts = response.duplicates;
-        viewState.createError =
-          'Duplicate order IDs found. Tick overwrite confirmation if you want to replace existing orders.';
-      } else {
-        viewState.duplicateConflicts = [];
-        viewState.createSuccess = `Created ${response.createdCount} orders, updated ${response.updatedCount} existing orders.`;
-      }
+      viewState.createSuccess = `Created ${response.createdCount} orders.`;
     } catch (error) {
       viewState.createError = error.message || 'Failed to create orders from preview.';
     } finally {
@@ -292,7 +246,6 @@ export function renderImportPage({ state }) {
   actionRow.appendChild(parseButton);
   actionRow.appendChild(createButton);
   editorCard.appendChild(actionRow);
-  editorCard.appendChild(overwriteLabel);
   editorCard.appendChild(createFeedback);
   editorCard.appendChild(helper);
 

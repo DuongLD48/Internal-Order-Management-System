@@ -34,8 +34,11 @@ function readOrdersPageCache(uid) {
       search: String(parsed.search ?? ''),
       sortDirection: parsed.sortDirection === 'asc' ? 'asc' : 'desc',
       filters: {
-        status: String(parsed.filters?.status ?? ''),
-        completed: String(parsed.filters?.completed ?? ''),
+        status: String(
+          parsed.filters?.status ??
+          (Array.isArray(parsed.filters?.statuses) ? parsed.filters.statuses[0] ?? '' : '')
+        ),
+        completed: String(parsed.filters?.completed ?? 'open'),
         dateFrom: String(parsed.filters?.dateFrom ?? ''),
         dateTo: String(parsed.filters?.dateTo ?? ''),
         sheetType: String(parsed.filters?.sheetType ?? '')
@@ -278,7 +281,7 @@ export function renderOrdersPage({ state }) {
     sortDirection: cachedView?.sortDirection ?? 'desc',
     filters: {
       status: cachedView?.filters?.status ?? '',
-      completed: cachedView?.filters?.completed ?? '',
+      completed: cachedView?.filters?.completed ?? 'open',
       dateFrom: cachedView?.filters?.dateFrom ?? '',
       dateTo: cachedView?.filters?.dateTo ?? '',
       sheetType: cachedView?.filters?.sheetType ?? ''
