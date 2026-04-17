@@ -17,4 +17,4 @@ export const PRODUCT_ITEM_STATUS = {
   COMPLETED: 'completed'
 };
 
-export const SHEET_TYPES = ['SDR', 'BATT', 'BFG'];
+export const SHEET_TYPES = ['SDR', 'BATT', 'BFG', 'MTB'];

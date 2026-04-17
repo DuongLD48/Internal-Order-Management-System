@@ -6,7 +6,7 @@ Internal order management frontend built with Vite, Vanilla JavaScript, Firebase
 
 - Email/password login with Firebase Authentication
 - Firestore-backed order list, search, filters, detail drawer, and logs
-- Excel paste import flow for `SDR`, `BATT`, and `BFG`
+- Excel paste import flow for `SDR`, `BATT`, `BFG`, and `MTB`
 - Batch create from import preview with duplicate protection
 - Print, reprint, complete, cancel, and edit order actions
 - User management for Firestore profile documents

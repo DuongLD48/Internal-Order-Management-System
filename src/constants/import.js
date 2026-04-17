@@ -25,6 +25,15 @@ export const SHEET_COLUMN_MAPS = {
     location: 4,
     inProdFlag: 5,
     orderId: 8
+  },
+  MTB: {
+    date: 0,
+    product: 1,
+    trackingId: 2,
+    location: 3,
+    status1: 4,
+    inProdFlag: 5,
+    orderId: 8
   }
 };
 

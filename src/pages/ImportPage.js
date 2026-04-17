@@ -14,7 +14,10 @@ const IMPORT_PLACEHOLDERS = {
 04/04\tVN\tBLZ006LRG-V14-M\tYT2609401000626219\tIn Production\tTRUE\t\t\t112-4226237-9024269`,
   BFG: `03/30\tSYC0118SSRG-M\tYT2608901001212142\tIn Production\tVN\tTRUE\t\t\t113-8071385-7490603
 03/30\tSYC0066SSRG-M\tYT2608901001212142\tIn Production\tVN\tTRUE\t\t\t113-8071385-7490603
-03/30\tSYC0207SSRG-M\tYT2608901001212142\tIn Production\tVN\tTRUE\t\t\t113-8071385-7490603`
+03/30\tSYC0207SSRG-M\tYT2608901001212142\tIn Production\tVN\tTRUE\t\t\t113-8071385-7490603`,
+  MTB: `04/17\tFYC0002DJER-2XL\tYT2610700704107450\tVN\tIn Production\tTRUE\t\t\t#mtb1002
+04/17\tFYC0002DJER-L\tYT2610700704107450\tVN\tIn Production\tTRUE\t\t\t#mtb1002
+04/17\tFYC0002DJER-M\tYT2610700704107450\tVN\tIn Production\tTRUE\t\t\t#mtb1002`
 };
 
 function renderAccessDenied() {
@@ -95,7 +98,7 @@ export function renderImportPage({ state }) {
 
   const helper = document.createElement('p');
   helper.className = 'import-helper';
-  helper.textContent = 'Supported sheet types: SDR, BATT, and BFG.';
+  helper.textContent = `Supported sheet types: ${SHEET_TYPES.join(', ')}.`;
 
   const summaryMount = document.createElement('div');
   const previewMount = document.createElement('div');
